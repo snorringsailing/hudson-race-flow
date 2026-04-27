@@ -39,6 +39,26 @@
     }
 
     .south { background:#17a2b8; }
+
+    /* MAP */
+    .mapRow { margin: 8px 0; font-size: 14px; }
+
+    .river {
+      display: flex;
+      height: 18px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #ddd;
+    }
+
+    .nj { background: #007bff; }
+    .ny { background: #ff4136; }
+
+    .labelRow {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
   </style>
 </head>
 
@@ -49,11 +69,12 @@
 <input type="date" id="date">
 <input type="time" id="time">
 
-<input type="number" id="windDir" placeholder="Wind Direction (degrees)">
+<input type="number" id="windDir" placeholder="Wind Direction (deg)">
 <input type="number" id="windSpeed" placeholder="Wind Speed (knots)">
 
-<button onclick="runModel()">Run 4 Hour Model</button>
+<button onclick="runModel()">Run Model</button>
 
+<div id="map"></div>
 <div id="output"></div>
 
 <script>
@@ -68,15 +89,15 @@ window.onload = function() {
 
 // ---------- SEGMENTS ----------
 const segments = [
-  { name: "Battery to Governors Island", zone: "south", landmark: "Harbor entrance" },
-  { name: "Governors to Red Hook", zone: "south", landmark: "Buttermilk Channel" },
-  { name: "Red Hook to Bay Ridge", zone: "south", landmark: "Upper Bay east side" },
-  { name: "Bay Ridge to Verrazzano Bridge", zone: "south", landmark: "Narrows" },
-  { name: "North Cove to Pier 25", zone: "hudson", landmark: "Battery / Holland Tunnel" },
-  { name: "Pier 25 to Pier 40", zone: "hudson", landmark: "Tribeca" },
-  { name: "Pier 40 to Pier 66", zone: "hudson", landmark: "Little Island" },
-  { name: "Pier 66 to Pier 79", zone: "hudson", landmark: "Midtown" },
-  { name: "Pier 79 to GW Bridge", zone: "hudson", landmark: "Stevens Tech" }
+  { name: "Battery → Governors", zone: "south" },
+  { name: "Governors → Red Hook", zone: "south" },
+  { name: "Red Hook → Bay Ridge", zone: "south" },
+  { name: "Bay Ridge → Verrazzano", zone: "south" },
+  { name: "North Cove → Pier 25", zone: "hudson" },
+  { name: "Pier 25 → Pier 40", zone: "hudson" },
+  { name: "Pier 40 → Pier 66", zone: "hudson" },
+  { name: "Pier 66 → Pier 79", zone: "hudson" },
+  { name: "Pier 79 → GW Bridge", zone: "hudson" }
 ];
 
 // ---------- CURRENT MODEL ----------
@@ -84,37 +105,26 @@ function getCurrent(i, t) {
   return Math.sin(i * 0.8 + t * 0.5) * 2;
 }
 
-// ---------- SIMPLE WIND (OPEN-METEO) ----------
+// ---------- WIND ----------
 async function fetchWind() {
   try {
     const res = await fetch(
       "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
     );
 
-    if (!res.ok) throw "HTTP error";
-
     const data = await res.json();
 
-    console.log("OPEN METEO:", data);
-
-    const dir = data.current_weather.winddirection;
-    const spd = data.current_weather.windspeed * 0.54; // km/h → knots
-
-    if (!dir || !spd) throw "Bad values";
-
     return {
-      dir: dir,
-      spd: spd,
+      dir: data.current_weather.winddirection,
+      spd: data.current_weather.windspeed * 0.54,
       label: "LIVE WIND"
     };
 
-  } catch (err) {
-    console.log("Wind error:", err);
-
+  } catch {
     return {
       dir: 220,
       spd: 12,
-      label: "WIND DEFAULT"
+      label: "DEFAULT WIND"
     };
   }
 }
@@ -131,94 +141,93 @@ async function runModel() {
   windDirInput = windDirInput ? parseFloat(windDirInput) : null;
   windSpeedInput = windSpeedInput ? parseFloat(windSpeedInput) : null;
 
-  let wind;
-
-  if (windDirInput && windSpeedInput) {
-    wind = { dir: windDirInput, spd: windSpeedInput, label: "MANUAL OVERRIDE" };
-  } else {
-    wind = await fetchWind();
-  }
+  let wind = (windDirInput && windSpeedInput)
+    ? { dir: windDirInput, spd: windSpeedInput, label: "MANUAL" }
+    : await fetchWind();
 
   let html = `
     <div class="header">
       ${wind.label}<br>
       ${date} ${time}<br>
-      ${wind.dir.toFixed(0)} deg @ ${wind.spd.toFixed(1)} kts
+      ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts
     </div>
   `;
+
+  let mapHTML = "";
 
   segments.forEach((seg, i) => {
 
     const now = getCurrent(i, 0);
-    const plus2 = getCurrent(i, 2);
     const ebb = now < 0;
+    const strength = Math.min(Math.abs(now) / 2, 1);
 
-    let side;
+    let njWidth = 50;
+    let nyWidth = 50;
+
+    if (ebb) {
+      njWidth = 50 + strength * 40;
+      nyWidth = 100 - njWidth;
+    } else {
+      nyWidth = 50 + strength * 40;
+      njWidth = 100 - nyWidth;
+    }
+
+    // ---------- MAP ----------
+    mapHTML += `
+      <div class="mapRow">
+        <div>${seg.name}</div>
+
+        <div class="river">
+          <div class="nj" style="width:${njWidth}%"></div>
+          <div class="ny" style="width:${nyWidth}%"></div>
+        </div>
+
+        <div class="labelRow">
+          <span>NJ</span>
+          <span>Manhattan</span>
+        </div>
+      </div>
+    `;
+
+    // ---------- TACTICS ----------
     let tactical;
 
-    // ---------- HUDSON ----------
     if (seg.zone === "hudson") {
 
-      if (ebb) {
-        side = "NJ favored";
-        tactical = "STAY WEST – ride ebb relief";
-      } else {
-        side = "Manhattan favored";
-        tactical = "STAY EAST – flood relief";
-      }
+      if (ebb) tactical = "STAY NJ – ebb relief";
+      else tactical = "STAY MANHATTAN – flood relief";
 
-      // crossing logic
-      if (Math.abs(now) < 0.5) {
-        tactical = "CROSS NOW – weak current";
-      }
+      if (Math.abs(now) < 0.5) tactical = "CROSS NOW";
 
-      if (plus2 * now < 0) {
-        tactical = "WAIT – current turning soon";
-      }
+    } else {
+
+      if (ebb) tactical = "MID-CHANNEL FLOW";
+      else tactical = "USE SHORE EDDIES";
+
+      if (Math.abs(now) < 0.5) tactical = "DIRECT ROUTE";
+
     }
 
-    // ---------- HARBOR ----------
-    else {
+    // wind influence
+    if (wind.dir > 40 && wind.dir < 120)
+      tactical += " | EAST WIND: Manhattan pressure";
 
-      if (ebb) {
-        side = "Mid-channel flow";
-        tactical = "AVOID SHALLOWS – strongest ebb mid-channel";
-      } else {
-        side = "Edges / eddies";
-        tactical = "WORK SHORELINES – flood back-eddies";
-      }
+    if (wind.dir > 190 && wind.dir < 260)
+      tactical += " | SW WIND: NJ pressure";
 
-      if (Math.abs(now) < 0.5) {
-        tactical = "DIRECT ROUTE – minimal current";
-      }
-    }
-
-    // ---------- WIND EFFECT ----------
-    if (wind.dir > 40 && wind.dir < 120) {
-      tactical += " | EAST WIND: favor Manhattan pressure";
-    }
-
-    if (wind.dir > 190 && wind.dir < 260) {
-      tactical += " | SW WIND: favor NJ pressure";
-    }
-
-    if (wind.spd < 7) {
-      tactical += " | LIGHT AIR: prioritize pressure over current";
-    }
+    if (wind.spd < 7)
+      tactical += " | LIGHT AIR";
 
     html += `
       <div class="segment ${seg.zone === 'south' ? 'south' : ''}">
         <strong>${seg.name}</strong><br>
-        ${seg.landmark}<br>
-
         Current: ${now.toFixed(1)} kts ${ebb ? "Ebb" : "Flood"}<br>
-
-        <b>${side}</b><br>
         <b>${tactical}</b>
       </div>
     `;
   });
 
+  document.getElementById("map").innerHTML = mapHTML;
   document.getElementById("output").innerHTML = html;
 }
 
