@@ -101,7 +101,21 @@ async function drawMap() {
       html: `<div style="color:${color};font-weight:bold;text-align:center">${arrow}<br>${side}</div>`
     });
 
-    L.marker(seg.coords, { icon })
+   // shift position left/right based on best side
+let lat = seg.coords[0];
+let lon = seg.coords[1];
+
+// amount of shift (tune this if needed)
+const shift = 0.01;
+
+if (side === "NJ") {
+  lon -= shift;
+}
+else if (side === "MAN") {
+  lon += shift;
+}
+
+L.marker([lat, lon], { icon })
       .addTo(map)
       .bindPopup(`
         <b>${seg.name}</b><br>
