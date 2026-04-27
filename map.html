@@ -32,7 +32,7 @@
 
 <script>
 
-// ---------- MAP BASE ----------
+// ---------- MAP ----------
 const map = L.map('map').setView([40.70, -74.02], 12);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
@@ -44,11 +44,12 @@ function getCompass(dir) {
   return dirs[Math.round(dir / 22.5) % 16];
 }
 
-// ---------- SAFE WIND ----------
+// ---------- WIND ----------
 async function fetchWind() {
   try {
     const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true");
     const d = await res.json();
+
     return {
       dir: d.current_weather.winddirection,
       spd: d.current_weather.windspeed * 0.54
@@ -58,7 +59,7 @@ async function fetchWind() {
   }
 }
 
-// ---------- SAFE CURRENT ----------
+// ---------- CURRENT ----------
 async function getCurrent() {
   try {
     const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
@@ -73,52 +74,95 @@ async function getCurrent() {
   }
 }
 
-// ---------- SEGMENTS ----------
+// ---------- SEGMENTS (SAFE WATER LANES) ----------
 const segments = [
-  { name:"Verrazzano", coords:[40.606,-74.045] },
-  { name:"Bay Ridge", coords:[40.620,-74.030] },
-  { name:"Red Hook", coords:[40.660,-74.015] },
-  { name:"Governors", coords:[40.695,-74.020] },
-  { name:"Battery", coords:[40.705,-74.015] },
-  { name:"Pier 40", coords:[40.730,-74.010] },
-  { name:"Midtown", coords:[40.760,-74.000] }
+  { name:"Verrazzano", nj:[40.606,-74.055], mid:[40.606,-74.045], man:[40.606,-74.035] },
+  { name:"Bay Ridge", nj:[40.620,-74.040], mid:[40.620,-74.030], man:[40.620,-74.020] },
+  { name:"Red Hook", nj:[40.660,-74.025], mid:[40.660,-74.015], man:[40.660,-74.005] },
+  { name:"Governors", nj:[40.695,-74.030], mid:[40.695,-74.020], man:[40.695,-74.010] },
+  { name:"Battery", nj:[40.705,-74.025], mid:[40.705,-74.015], man:[40.705,-74.005] },
+  { name:"Pier 40", nj:[40.730,-74.020], mid:[40.730,-74.010], man:[40.730,-74.000] },
+  { name:"Midtown", nj:[40.760,-74.015], mid:[40.760,-74.005], man:[40.760,-73.995] }
 ];
 
 // ---------- DRAW ----------
 async function drawMap() {
 
+  const hours = [0,1,2,3,4];
+
+  // FAST render first
+  segments.forEach(seg => {
+    L.marker(seg.mid).addTo(map);
+  });
+
+  // load real data
   const wind = await fetchWind();
   const base = await getCurrent();
 
+  map.eachLayer(layer => {
+    if (layer instanceof L.Marker) map.removeLayer(layer);
+  });
+
   segments.forEach((seg, i) => {
 
-    const current = base * (1 + (i - 3)*0.05);
+    let timeline = [];
+    hours.forEach(h => {
+      timeline.push(base * Math.cos(h * 0.8));
+    });
+
+    const current = timeline[0];
     const ebb = current < 0;
 
+    // ---------- SIDE ----------
     let side = ebb ? "NJ" : "MAN";
 
     if (wind.spd < 7) {
       if (wind.dir > 45 && wind.dir < 135) side = "MAN";
-      if (wind.dir > 225 && wind.dir < 315) side = "NJ";
+      else if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
-    let lat = seg.coords[0];
-    let lon = seg.coords[1];
+    // ---------- POSITION ----------
+    let pos = seg.mid;
+    if (side === "NJ") pos = seg.nj;
+    if (side === "MAN") pos = seg.man;
 
-    if (side === "NJ") lon -= 0.01;
-    if (side === "MAN") lon += 0.01;
+    // ---------- ICON ----------
+    const color = side === "NJ" ? "blue" : "red";
+    const arrow = ebb ? "↓" : "↑";
 
     const icon = L.divIcon({
-      html:`<div style="font-weight:bold;color:${side==="NJ"?"blue":"red"}">
-      ${ebb?"↓":"↑"}<br>${side}</div>`
+      html: `<div style="font-weight:bold;color:${color};text-align:center">
+        ${arrow}<br>${side}
+      </div>`
     });
 
-    L.marker([lat,lon],{icon})
+    // ---------- TURN ----------
+    let turn = "";
+    for (let h=1; h<hours.length; h++) {
+      if (timeline[h-1]*timeline[h] < 0) {
+        turn = `TURN ~ +${h}h<br>`;
+      }
+    }
+
+    // ---------- TREND ----------
+    let trend = "";
+    hours.forEach((h, idx) => {
+      trend += `+${h}h: ${timeline[idx].toFixed(1)} kts<br>`;
+    });
+
+    // ---------- MARKER ----------
+    L.marker(pos, { icon })
       .addTo(map)
       .bindPopup(`
-        <b>${seg.name}</b><br>
+        <b>${seg.name}</b><br><br>
+
         Wind: ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts<br>
-        Current: ${current.toFixed(1)} kts (${ebb?"Ebb":"Flood"})
+        Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br><br>
+
+        ${turn}
+
+        <b>Trend</b><br>
+        ${trend}
       `);
   });
 
