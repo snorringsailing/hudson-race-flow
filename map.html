@@ -60,34 +60,94 @@ function getCurrent(i) {
 }
 
 // ---------- DRAW ----------
-segments.forEach((seg, i) => {
+async function getWind() {
+  try {
+    const res = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
+    );
+    const data = await res.json();
+    return {
+      dir: data.current_weather.winddirection,
+      spd: data.current_weather.windspeed * 0.54
+    };
+  } catch {
+    return { dir: 220, spd: 10 };
+  }
+}
 
-  const current = getCurrent(i);
+function windFavor(dir) {
+  // east winds favor Manhattan, west winds favor NJ
+  if (dir > 45 && dir < 135) return "MAN";
+  if (dir > 225 && dir < 315) return "NJ";
+  return "NEUTRAL";
+}
 
-  // color logic
-  let color = current < 0 ? "blue" : "red";
-  let width = 5 + Math.abs(current) * 3;
+async function drawMap() {
 
-  L.circle(seg.coords, {
-    radius: 300,
-    color: color,
-    fillOpacity: 0.5
-  }).addTo(map)
-    let direction = current < 0 ? "Ebb (southbound)" : "Flood (northbound)";
-let favor = current < 0 ? "Favor NJ (west side)" : "Favor Manhattan (east side)";
+  const wind = await getWind();
 
-L.circle(seg.coords, {
-  radius: 300,
-  color: current < 0 ? "blue" : "red",
-  fillOpacity: 0.6
-}).addTo(map)
-  .bindPopup(
-    `<b>${seg.name}</b><br>
-     ${direction}<br>
-     Current: ${current.toFixed(1)} kts<br>
-     <b>${favor}</b>`
-  );
-});
+  segments.forEach((seg, i) => {
+
+    const current = getCurrent(i);
+    const ebb = current < 0;
+
+    const currentStrength = Math.abs(current);
+
+    // current-based side
+    let currentSide = ebb ? "NJ" : "MAN";
+
+    // wind-based side
+    let windSide = windFavor(wind.dir);
+
+    let finalSide;
+
+    // ---------- COMBINE ----------
+    if (wind.spd < 7) {
+      finalSide = windSide; // light air → wind dominates
+    }
+    else if (currentStrength > 1) {
+      finalSide = currentSide; // strong current dominates
+    }
+    else {
+      finalSide = windSide !== "NEUTRAL" ? windSide : currentSide;
+    }
+
+    // ---------- VISUAL ----------
+    let color = "gray";
+    if (finalSide === "NJ") color = "blue";
+    if (finalSide === "MAN") color = "red";
+
+    const arrow = ebb ? "↓" : "↑";
+
+    const icon = L.divIcon({
+      className: '',
+      html: `
+        <div style="
+          color:${color};
+          font-weight:bold;
+          text-align:center;
+          font-size:16px;
+        ">
+          ${arrow}<br>${finalSide}
+        </div>
+      `,
+      iconSize: [30, 30]
+    });
+
+    L.marker(seg.coords, { icon: icon })
+      .addTo(map)
+      .bindPopup(`
+        <b>${seg.name}</b><br>
+        Wind: ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts<br>
+        Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
+        <b>Best Side: ${finalSide}</b>
+      `);
+
+  });
+}
+
+// run it
+drawMap();
 
 // centerline
 L.polyline(segments.map(s => s.coords), {
