@@ -91,22 +91,24 @@ function getCurrent(i, t) {
 async function fetchWind() {
   try {
     const res = await fetch(
-      "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=wind&station=8530973&units=english&format=json"
+      "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=latest_obs&station=8530973&units=english&format=json"
     );
 
     const data = await res.json();
 
     if (!data.data || data.data.length === 0) throw "No data";
 
-    const latest = data.data[data.data.length - 1];
+    const latest = data.data[0];
 
     return {
-      dir: parseFloat(latest.d),
-      spd: parseFloat(latest.s),
+      dir: parseFloat(latest.wind_direction) || 220,
+      spd: parseFloat(latest.wind_speed) || 10,
       label: "ROBBINS REEF LIVE"
     };
 
-  } catch {
+  } catch (err) {
+    console.log("Wind fetch failed:", err);
+
     return {
       dir: 220,
       spd: 12,
