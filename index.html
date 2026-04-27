@@ -2,11 +2,6 @@
 <html>
 <head>
   <title>Hudson Race Flow</title>
-  <p>
-Enter wind or use live data.  
-Use Map View to see best side and current trends.  
-Tap markers for timing and crossing insight.
-</p>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style>
@@ -42,6 +37,28 @@ Tap markers for timing and crossing insight.
       background: #28a745;
       color: white;
     }
+
+    .south { background:#17a2b8; }
+
+    /* MAP */
+    .mapRow { margin: 8px 0; font-size: 14px; }
+
+    .river {
+      display: flex;
+      height: 18px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #ddd;
+    }
+
+    .nj { background: #007bff; }
+    .ny { background: #ff4136; }
+
+    .labelRow {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
   </style>
 </head>
 
@@ -49,110 +66,170 @@ Tap markers for timing and crossing insight.
 
 <h2>Hudson Race Flow</h2>
 
+<input type="date" id="date">
+<input type="time" id="time">
+
 <input type="number" id="windDir" placeholder="Wind Direction (deg)">
 <input type="number" id="windSpeed" placeholder="Wind Speed (knots)">
 
 <button onclick="runModel()">Run Model</button>
 
-<a href="map.html">
-  <button>Open Map View</button>
-</a>
-
+<div id="map"></div>
 <div id="output"></div>
 
 <script>
 
-function getCompass(dir) {
-  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-  return dirs[Math.round(dir / 22.5) % 16];
+// ---------- DEFAULT DATE/TIME ----------
+window.onload = function() {
+  const now = new Date();
+  document.getElementById("date").value = now.toISOString().split("T")[0];
+  document.getElementById("time").value = now.toTimeString().slice(0,5);
+  runModel();
+};
+
+// ---------- SEGMENTS ----------
+const segments = [
+  { name: "Battery → Governors", zone: "south" },
+  { name: "Governors → Red Hook", zone: "south" },
+  { name: "Red Hook → Bay Ridge", zone: "south" },
+  { name: "Bay Ridge → Verrazzano", zone: "south" },
+  { name: "North Cove → Pier 25", zone: "hudson" },
+  { name: "Pier 25 → Pier 40", zone: "hudson" },
+  { name: "Pier 40 → Pier 66", zone: "hudson" },
+  { name: "Pier 66 → Pier 79", zone: "hudson" },
+  { name: "Pier 79 → GW Bridge", zone: "hudson" }
+];
+
+// ---------- CURRENT MODEL ----------
+function getCurrent(i, t) {
+  return Math.sin(i * 0.8 + t * 0.5) * 2;
 }
 
+// ---------- WIND ----------
 async function fetchWind() {
   try {
-    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true");
+    const res = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
+    );
+
     const data = await res.json();
 
     return {
       dir: data.current_weather.winddirection,
-      spd: data.current_weather.windspeed * 0.54
+      spd: data.current_weather.windspeed * 0.54,
+      label: "LIVE WIND"
     };
+
   } catch {
-    return { dir: 220, spd: 10 };
+    return {
+      dir: 220,
+      spd: 12,
+      label: "DEFAULT WIND"
+    };
   }
 }
 
-async function getCurrentFromNOAA() {
-  try {
-    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
-    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-
-    const res = await fetch(proxy);
-    const data = await res.json();
-
-    if (!data.data) throw "no data";
-
-    return parseFloat(data.data[0].v);
-
-  } catch {
-    return Math.sin(Date.now()/10000000)*1.5;
-  }
-}
-
-const segments = [
-  "Verrazzano",
-  "Bay Ridge",
-  "Red Hook",
-  "Governors Island",
-  "Battery",
-  "Pier 25",
-  "Pier 40",
-  "Midtown",
-  "Stevens",
-  "GW Bridge"
-];
-
+// ---------- MAIN ----------
 async function runModel() {
+
+  const date = document.getElementById("date").value;
+  const time = document.getElementById("time").value;
 
   let windDirInput = document.getElementById("windDir").value;
   let windSpeedInput = document.getElementById("windSpeed").value;
 
-  let wind = (windDirInput && windSpeedInput)
-    ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
-    : await fetchWind();
+  windDirInput = windDirInput ? parseFloat(windDirInput) : null;
+  windSpeedInput = windSpeedInput ? parseFloat(windSpeedInput) : null;
 
-  const baseCurrent = await getCurrentFromNOAA();
+  let wind = (windDirInput && windSpeedInput)
+    ? { dir: windDirInput, spd: windSpeedInput, label: "MANUAL" }
+    : await fetchWind();
 
   let html = `
     <div class="header">
-      ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
+      ${wind.label}<br>
+      ${date} ${time}<br>
+      ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts
     </div>
   `;
 
-  segments.forEach((name, i) => {
+  let mapHTML = "";
 
-    const current = baseCurrent * (1 + (i - segments.length/2)*0.05);
-    const ebb = current < 0;
+  segments.forEach((seg, i) => {
 
-    let call = ebb ? "Favor NJ" : "Favor Manhattan";
+    const now = getCurrent(i, 0);
+    const ebb = now < 0;
+    const strength = Math.min(Math.abs(now) / 2, 1);
 
-    if (wind.spd < 7) {
-      if (wind.dir > 45 && wind.dir < 135) call = "Favor Manhattan (wind)";
-      if (wind.dir > 225 && wind.dir < 315) call = "Favor NJ (wind)";
+    let njWidth = 50;
+    let nyWidth = 50;
+
+    if (ebb) {
+      njWidth = 50 + strength * 40;
+      nyWidth = 100 - njWidth;
+    } else {
+      nyWidth = 50 + strength * 40;
+      njWidth = 100 - nyWidth;
     }
 
+    // ---------- MAP ----------
+    mapHTML += `
+      <div class="mapRow">
+        <div>${seg.name}</div>
+
+        <div class="river">
+          <div class="nj" style="width:${njWidth}%"></div>
+          <div class="ny" style="width:${nyWidth}%"></div>
+        </div>
+
+        <div class="labelRow">
+          <span>NJ</span>
+          <span>Manhattan</span>
+        </div>
+      </div>
+    `;
+
+    // ---------- TACTICS ----------
+    let tactical;
+
+    if (seg.zone === "hudson") {
+
+      if (ebb) tactical = "STAY NJ – ebb relief";
+      else tactical = "STAY MANHATTAN – flood relief";
+
+      if (Math.abs(now) < 0.5) tactical = "CROSS NOW";
+
+    } else {
+
+      if (ebb) tactical = "MID-CHANNEL FLOW";
+      else tactical = "USE SHORE EDDIES";
+
+      if (Math.abs(now) < 0.5) tactical = "DIRECT ROUTE";
+
+    }
+
+    // wind influence
+    if (wind.dir > 40 && wind.dir < 120)
+      tactical += " | EAST WIND: Manhattan pressure";
+
+    if (wind.dir > 190 && wind.dir < 260)
+      tactical += " | SW WIND: NJ pressure";
+
+    if (wind.spd < 7)
+      tactical += " | LIGHT AIR";
+
     html += `
-      <div class="segment">
-        <b>${name}</b><br>
-        Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
-        <b>${call}</b>
+      <div class="segment ${seg.zone === 'south' ? 'south' : ''}">
+        <strong>${seg.name}</strong><br>
+        Current: ${now.toFixed(1)} kts ${ebb ? "Ebb" : "Flood"}<br>
+        <b>${tactical}</b>
       </div>
     `;
   });
 
+  document.getElementById("map").innerHTML = mapHTML;
   document.getElementById("output").innerHTML = html;
 }
-
-runModel();
 
 </script>
 
