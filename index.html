@@ -91,19 +91,32 @@ async function fetchWind() {
       "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current=wind_speed,wind_direction"
     );
 
+    if (!res.ok) throw "HTTP error";
+
     const data = await res.json();
 
+    console.log("OPEN METEO DATA:", data);
+
+    if (!data.current) throw "No current data";
+
+    const dir = data.current.wind_direction;
+    const spd = data.current.wind_speed * 0.54;
+
+    if (!dir || !spd) throw "Bad wind values";
+
     return {
-      dir: data.current.wind_direction,
-      spd: data.current.wind_speed * 0.54, // km/h → knots
-      label: "LIVE WIND (HARBOR MODEL)"
+      dir: dir,
+      spd: spd,
+      label: "LIVE WIND"
     };
 
-  } catch {
+  } catch (err) {
+    console.log("Wind error:", err);
+
     return {
       dir: 220,
       spd: 12,
-      label: "WIND DEFAULT"
+      label: "WIND DEFAULT (CHECK CONSOLE)"
     };
   }
 }
