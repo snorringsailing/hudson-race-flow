@@ -169,7 +169,7 @@ async function runModel() {
     const baseCurrent = await getCurrentFromNOAA();
 
     const hours = [0,1,2,3,4];
-
+document.getElementById("output").innerHTML = "Loading data...";
     let html = `
       <div class="header">
         ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
