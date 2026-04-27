@@ -40,25 +40,33 @@
 
     .south { background:#17a2b8; }
 
-    /* MAP */
-    .mapRow { margin: 8px 0; font-size: 14px; }
+    .mapRow { margin: 10px 0; }
 
     .river {
       display: flex;
-      height: 18px;
+      height: 20px;
       border-radius: 6px;
       overflow: hidden;
       background: #ddd;
     }
 
-    .nj { background: #007bff; }
-    .ny { background: #ff4136; }
-
-    .labelRow {
-      display: flex;
-      justify-content: space-between;
+    .nj {
+      background: #007bff;
+      text-align: left;
+      padding-left: 5px;
       font-size: 12px;
+      color: white;
     }
+
+    .ny {
+      background: #ff4136;
+      text-align: right;
+      padding-right: 5px;
+      font-size: 12px;
+      color: white;
+    }
+
+    .small { font-size: 12px; }
   </style>
 </head>
 
@@ -79,7 +87,6 @@
 
 <script>
 
-// ---------- DEFAULT DATE/TIME ----------
 window.onload = function() {
   const now = new Date();
   document.getElementById("date").value = now.toISOString().split("T")[0];
@@ -87,25 +94,22 @@ window.onload = function() {
   runModel();
 };
 
-// ---------- SEGMENTS ----------
 const segments = [
-  { name: "Battery → Governors", zone: "south" },
-  { name: "Governors → Red Hook", zone: "south" },
-  { name: "Red Hook → Bay Ridge", zone: "south" },
-  { name: "Bay Ridge → Verrazzano", zone: "south" },
-  { name: "North Cove → Pier 25", zone: "hudson" },
-  { name: "Pier 25 → Pier 40", zone: "hudson" },
-  { name: "Pier 40 → Pier 66", zone: "hudson" },
-  { name: "Pier 66 → Pier 79", zone: "hudson" },
-  { name: "Pier 79 → GW Bridge", zone: "hudson" }
+  { name: "Battery to Governors", zone: "south" },
+  { name: "Governors to Red Hook", zone: "south" },
+  { name: "Red Hook to Bay Ridge", zone: "south" },
+  { name: "Bay Ridge to Verrazzano", zone: "south" },
+  { name: "North Cove to Pier 25", zone: "hudson" },
+  { name: "Pier 25 to Pier 40", zone: "hudson" },
+  { name: "Pier 40 to Pier 66", zone: "hudson" },
+  { name: "Pier 66 to Pier 79", zone: "hudson" },
+  { name: "Pier 79 to GW Bridge", zone: "hudson" }
 ];
 
-// ---------- CURRENT MODEL ----------
 function getCurrent(i, t) {
   return Math.sin(i * 0.8 + t * 0.5) * 2;
 }
 
-// ---------- WIND ----------
 async function fetchWind() {
   try {
     const res = await fetch(
@@ -129,11 +133,7 @@ async function fetchWind() {
   }
 }
 
-// ---------- MAIN ----------
 async function runModel() {
-
-  const date = document.getElementById("date").value;
-  const time = document.getElementById("time").value;
 
   let windDirInput = document.getElementById("windDir").value;
   let windSpeedInput = document.getElementById("windSpeed").value;
@@ -145,90 +145,61 @@ async function runModel() {
     ? { dir: windDirInput, spd: windSpeedInput, label: "MANUAL" }
     : await fetchWind();
 
+  let mapHTML = "";
   let html = `
     <div class="header">
       ${wind.label}<br>
-      ${date} ${time}<br>
-      ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts
+      ${wind.dir.toFixed(0)} deg @ ${wind.spd.toFixed(1)} kts
     </div>
   `;
 
-  let mapHTML = "";
-
   segments.forEach((seg, i) => {
 
-    const now = getCurrent(i, 0);
-    const ebb = now < 0;
-    const strength = Math.min(Math.abs(now) / 2, 1);
+    const current = getCurrent(i, 0);
+    const ebb = current < 0;
+    const strength = Math.min(Math.abs(current)/2,1);
 
     let njWidth = 50;
     let nyWidth = 50;
 
     if (ebb) {
-      njWidth = 50 + strength * 40;
+      njWidth = 50 + strength*40;
       nyWidth = 100 - njWidth;
     } else {
-      nyWidth = 50 + strength * 40;
+      nyWidth = 50 + strength*40;
       njWidth = 100 - nyWidth;
     }
 
-    // ---------- MAP ----------
+    let direction = ebb ? "Ebb (south)" : "Flood (north)";
+    let favored = ebb ? "Favor NJ" : "Favor Manhattan";
+
     mapHTML += `
-      let direction = ebb ? "Ebb ↓ (southbound)" : "Flood ↑ (northbound)";
-let favored = ebb ? "Favor NJ" : "Favor Manhattan";
+      <div class="mapRow">
+        <div><b>${seg.name}</b></div>
+        <div class="small">${direction}</div>
 
-mapHTML += `
-  <div class="mapRow">
-    <div><b>${seg.name}</b></div>
+        <div class="river">
+          <div class="nj" style="width:${njWidth}%">${njWidth>nyWidth?"NJ":""}</div>
+          <div class="ny" style="width:${nyWidth}%">${nyWidth>njWidth?"MAN":""}</div>
+        </div>
 
-    <div>${direction}</div>
+        <div class="small"><b>${favored}</b></div>
+      </div>
+    `;
 
-    <div class="river">
-      <div class="nj" style="width:${njWidth}%">${njWidth > nyWidth ? "NJ" : ""}</div>
-      <div class="ny" style="width:${nyWidth}%">${nyWidth > njWidth ? "MAN" : ""}</div>
-    </div>
-
-    <div class="labelRow">
-      <span>NJ</span>
-      <span>Manhattan</span>
-    </div>
-
-    <div><b>${favored}</b></div>
-  </div>
-`;
-    // ---------- TACTICS ----------
     let tactical;
 
     if (seg.zone === "hudson") {
-
-      if (ebb) tactical = "STAY NJ – ebb relief";
-      else tactical = "STAY MANHATTAN – flood relief";
-
-      if (Math.abs(now) < 0.5) tactical = "CROSS NOW";
-
+      tactical = ebb ? "Stay NJ" : "Stay Manhattan";
+      if (Math.abs(current)<0.5) tactical="Cross now";
     } else {
-
-      if (ebb) tactical = "MID-CHANNEL FLOW";
-      else tactical = "USE SHORE EDDIES";
-
-      if (Math.abs(now) < 0.5) tactical = "DIRECT ROUTE";
-
+      tactical = ebb ? "Mid-channel" : "Use edges";
     }
 
-    // wind influence
-    if (wind.dir > 40 && wind.dir < 120)
-      tactical += " | EAST WIND: Manhattan pressure";
-
-    if (wind.dir > 190 && wind.dir < 260)
-      tactical += " | SW WIND: NJ pressure";
-
-    if (wind.spd < 7)
-      tactical += " | LIGHT AIR";
-
     html += `
-      <div class="segment ${seg.zone === 'south' ? 'south' : ''}">
-        <strong>${seg.name}</strong><br>
-        Current: ${now.toFixed(1)} kts ${ebb ? "Ebb" : "Flood"}<br>
+      <div class="segment ${seg.zone==="south"?"south":""}">
+        <b>${seg.name}</b><br>
+        Current: ${current.toFixed(1)} kts (${direction})<br>
         <b>${tactical}</b>
       </div>
     `;
