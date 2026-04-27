@@ -109,50 +109,81 @@ function getCompass(dir) {
 
 async function drawMap() {
 
-  const wind = await fetchWind();
-  const baseCurrent = await getCurrentFromNOAA();
-
   const hours = [0,1,2,3,4];
 
+  // ---------- FAST FIRST RENDER ----------
   segments.forEach((seg, i) => {
 
-    let timeline = [];
+    const fallbackCurrent = Math.sin(Date.now()/10000000) * 1.2;
+    const ebb = fallbackCurrent < 0;
 
-    hours.forEach(h => {
-      timeline.push(baseCurrent * Math.cos(h * 0.8));
-    });
+    const side = ebb ? "NJ" : "MAN";
 
-    const current = timeline[0];
-    const ebb = current < 0;
-
-    // ---------- DETERMINE SIDE (ONE SOURCE OF TRUTH) ----------
-    let side = ebb ? "NJ" : "MAN";
-
-    if (wind.spd < 7) {
-      if (wind.dir > 45 && wind.dir < 135) side = "MAN";
-      else if (wind.dir > 225 && wind.dir < 315) side = "NJ";
-    }
-
-    // ---------- POSITION BASED ON SIDE ----------
     let lat = seg.coords[0];
     let lon = seg.coords[1];
-    const shift = 0.01;
 
-    if (side === "NJ") lon = seg.coords[1] - shift;
-    else if (side === "MAN") lon = seg.coords[1] + shift;
-    else lon = seg.coords[1]; // neutral
-
-    // ---------- VISUAL ----------
-    const color = side === "NJ" ? "blue" : "red";
-    const arrow = ebb ? "↓" : "↑";
+    if (side === "NJ") lon -= 0.01;
+    if (side === "MAN") lon += 0.01;
 
     const icon = L.divIcon({
-      html: `
-        <div style="color:${color};font-weight:bold;text-align:center">
-          ${arrow}<br>${side}
-        </div>
-      `
+      html: `<div style="color:gray;font-weight:bold;text-align:center">...</div>`
     });
+
+    const marker = L.marker([lat, lon], { icon }).addTo(map);
+
+    // ---------- UPDATE WITH REAL DATA ----------
+    (async () => {
+
+      const wind = await fetchWind();
+      const baseCurrent = await getCurrentFromNOAA();
+
+      let timeline = [];
+      hours.forEach(h => {
+        timeline.push(baseCurrent * Math.cos(h * 0.8));
+      });
+
+      const current = timeline[0];
+      const ebb = current < 0;
+
+      let side = ebb ? "NJ" : "MAN";
+
+      if (wind.spd < 7) {
+        if (wind.dir > 45 && wind.dir < 135) side = "MAN";
+        if (wind.dir > 225 && wind.dir < 315) side = "NJ";
+      }
+
+      let lat = seg.coords[0];
+      let lon = seg.coords[1];
+
+      if (side === "NJ") lon -= 0.01;
+      if (side === "MAN") lon += 0.01;
+
+      const color = side === "NJ" ? "blue" : "red";
+      const arrow = ebb ? "↓" : "↑";
+
+      const icon = L.divIcon({
+        html: `<div style="color:${color};font-weight:bold;text-align:center">${arrow}<br>${side}</div>`
+      });
+
+      marker.setLatLng([lat, lon]);
+      marker.setIcon(icon);
+
+      let trend = "";
+      hours.forEach((h, idx) => {
+        trend += `+${h}h: ${timeline[idx].toFixed(1)} kts<br>`;
+      });
+
+      marker.bindPopup(`
+        <b>${seg.name}</b><br>
+        Wind: ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts<br>
+        Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br><br>
+        ${trend}
+      );
+
+    })();
+
+  });
+}
 
     // ---------- TURN DETECTION ----------
     let turn = "";
