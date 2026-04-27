@@ -139,7 +139,7 @@ async function runModel() {
     html += `
       <div class="segment">
         <b>${name}</b><br>
-        Current: ${current.toFixed(1)} kts<br>
+        Current: ${current.toFixed(1)} kts (${current < 0 ? "Ebb" : "Flood"})<br>
         <b>${call}</b>
       </div>
     `;
