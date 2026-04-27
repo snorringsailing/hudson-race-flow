@@ -90,26 +90,21 @@ function getCurrent(i, t) {
 // ---------- ROBBINS REEF WIND ----------
 async function fetchWind() {
   try {
-    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=wind&station=8530973&units=english&format=json";
+    const res = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current=wind_speed,wind_direction"
+    );
 
-    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-
-    const res = await fetch(proxy);
     const data = await res.json();
 
-    if (!data.data || data.data.length === 0) throw "No data";
+    const dir = data.current.wind_direction;
+    const spd = data.current.wind_speed * 0.54; // convert km/h → knots
 
-    const latest = data.data[data.data.length - 1];
-
-    const dir = parseFloat(latest.d);
-    const spd = parseFloat(latest.s);
-
-    if (isNaN(dir) || isNaN(spd)) throw "Bad data";
+    if (!dir || !spd) throw "Bad data";
 
     return {
       dir: dir,
       spd: spd,
-      label: "ROBBINS REEF LIVE"
+      label: "LIVE WIND (HARBOR)"
     };
 
   } catch (err) {
@@ -118,7 +113,7 @@ async function fetchWind() {
     return {
       dir: 220,
       spd: 12,
-      label: "ROBBINS REEF FALLBACK"
+      label: "WIND FALLBACK"
     };
   }
 }
