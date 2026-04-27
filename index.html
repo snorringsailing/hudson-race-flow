@@ -152,31 +152,83 @@ const segments = [
 
 async function runModel() {
 
-  let windDirInput = document.getElementById("windDir").value;
-  let windSpeedInput = document.getElementById("windSpeed").value;
+  try {
 
-  let wind = (windDirInput && windSpeedInput)
-    ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
-    : await fetchWind();
+    let windDirInput = document.getElementById("windDir").value;
+    let windSpeedInput = document.getElementById("windSpeed").value;
 
-  const baseCurrent = await getCurrentFromNOAA();
+    let wind = (windDirInput && windSpeedInput)
+      ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
+      : await fetchWind();
 
-  let html = `
-    <div class="header">
-      ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
-    </div>
-  `;
+    const baseCurrent = await getCurrentFromNOAA();
 
-  segments.forEach((name, i) => {
+    const hours = [0,1,2,3,4];
 
-  const hours = [0,1,2,3,4];
+    let html = `
+      <div class="header">
+        ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
+      </div>
+    `;
 
-  let timeline = [];
+    segments.forEach((name, i) => {
 
-  hours.forEach(h => {
-    timeline.push(baseCurrent * Math.cos(h * 0.8));
-  });
+      let timeline = [];
 
+      hours.forEach(h => {
+        timeline.push(baseCurrent * Math.cos(h * 0.8));
+      });
+
+      const current = timeline[0];
+      const ebb = current < 0;
+
+      let call = ebb ? "Favor NJ" : "Favor Manhattan";
+
+      if (wind.spd < 7) {
+        if (wind.dir > 45 && wind.dir < 135) call = "Favor Manhattan (wind)";
+        if (wind.dir > 225 && wind.dir < 315) call = "Favor NJ (wind)";
+      }
+
+      // TURN detection
+      let turn = "";
+      for (let h=1; h<hours.length; h++) {
+        if (timeline[h-1]*timeline[h] < 0) {
+          turn = `TURN ~ +${h}h`;
+        }
+      }
+
+      // TREND
+      let trend = hours.map((h, idx) =>
+        `+${h}h: ${timeline[idx].toFixed(1)}`
+      ).join(" | ");
+
+      html += `
+        <div class="segment">
+          <b>${name}</b><br>
+
+          Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
+          <div class="tag">${call}</div>
+
+          <div style="margin-top:6px;font-size:13px;color:#555;">
+            ${turn ? `<b>${turn}</b><br>` : ""}
+            ${trend}
+          </div>
+        </div>
+      `;
+    });
+
+    document.getElementById("output").innerHTML = html;
+
+  } catch (err) {
+    console.log("RUN MODEL ERROR:", err);
+
+    document.getElementById("output").innerHTML = `
+      <div style="color:red;">
+        Error loading data. Refresh page.
+      </div>
+    `;
+  }
+}
   const current = timeline[0];
   const ebb = current < 0;
 
