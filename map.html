@@ -92,6 +92,11 @@ const segments = [
 ];
 
 // ---------- DRAW ----------
+function getCompass(dir) {
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(dir / 22.5) % 16];
+}
+
 async function drawMap() {
 
   const wind = await fetchWind();
@@ -110,30 +115,36 @@ async function drawMap() {
     const current = timeline[0];
     const ebb = current < 0;
 
-    // determine side
+    // ---------- DETERMINE SIDE (ONE SOURCE OF TRUTH) ----------
     let side = ebb ? "NJ" : "MAN";
 
     if (wind.spd < 7) {
-      const wf = windFavor(wind.dir);
-      if (wf !== "NEUTRAL") side = wf;
+      if (wind.dir > 45 && wind.dir < 135) side = "MAN";
+      else if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
-    // shift marker
+    // ---------- POSITION BASED ON SIDE ----------
     let lat = seg.coords[0];
     let lon = seg.coords[1];
     const shift = 0.01;
 
-    if (side === "NJ") lon -= shift;
-    if (side === "MAN") lon += shift;
+    if (side === "NJ") lon = seg.coords[1] - shift;
+    else if (side === "MAN") lon = seg.coords[1] + shift;
+    else lon = seg.coords[1]; // neutral
 
+    // ---------- VISUAL ----------
     const color = side === "NJ" ? "blue" : "red";
     const arrow = ebb ? "↓" : "↑";
 
     const icon = L.divIcon({
-      html: `<div style="color:${color};font-weight:bold;text-align:center">${arrow}<br>${side}</div>`
+      html: `
+        <div style="color:${color};font-weight:bold;text-align:center">
+          ${arrow}<br>${side}
+        </div>
+      `
     });
 
-    // detect turn
+    // ---------- TURN DETECTION ----------
     let turn = "";
     for (let h=1; h<hours.length; h++) {
       if (timeline[h-1]*timeline[h] < 0) {
@@ -141,7 +152,7 @@ async function drawMap() {
       }
     }
 
-    // timeline text
+    // ---------- TREND ----------
     let trend = "";
     hours.forEach((h, idx) => {
       trend += `+${h}h: ${timeline[idx].toFixed(1)} kts<br>`;
@@ -151,15 +162,22 @@ async function drawMap() {
       .addTo(map)
       .bindPopup(`
         <b>${seg.name}</b><br><br>
-        Wind: ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts<br>
+
+        Wind: ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts<br>
         Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br><br>
+
+        <b>Best Side: ${side}</b><br><br>
+
         ${turn}
+
         <b>Trend</b><br>
         ${trend}
       `);
 
   });
 }
+
+drawMap();
 
 // RUN SAFELY
 drawMap();
