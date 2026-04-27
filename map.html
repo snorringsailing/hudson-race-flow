@@ -14,7 +14,8 @@
     .backBtn {
       position:absolute;
       top:10px;
-      left:10px;
+      left:50%;
+      transform:translateX(-50%);
       z-index:1000;
     }
   </style>
@@ -24,7 +25,7 @@
 
 <div class="backBtn">
   <a href="/hudson-race-flow/index.html">
-    <button>← Model</button>
+    <button style="padding:8px 16px;">Back to Model</button>
   </a>
 </div>
 
@@ -74,7 +75,7 @@ async function getCurrent() {
   }
 }
 
-// ---------- SEGMENTS (SAFE WATER LANES) ----------
+// ---------- SEGMENTS ----------
 const segments = [
   { name:"Verrazzano", nj:[40.606,-74.055], mid:[40.606,-74.045], man:[40.606,-74.035] },
   { name:"Bay Ridge", nj:[40.620,-74.040], mid:[40.620,-74.030], man:[40.620,-74.020] },
@@ -90,12 +91,11 @@ async function drawMap() {
 
   const hours = [0,1,2,3,4];
 
-  // FAST render first
+  // quick render
   segments.forEach(seg => {
     L.marker(seg.mid).addTo(map);
   });
 
-  // load real data
   const wind = await fetchWind();
   const base = await getCurrent();
 
@@ -113,7 +113,6 @@ async function drawMap() {
     const current = timeline[0];
     const ebb = current < 0;
 
-    // ---------- SIDE ----------
     let side = ebb ? "NJ" : "MAN";
 
     if (wind.spd < 7) {
@@ -121,12 +120,10 @@ async function drawMap() {
       else if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
-    // ---------- POSITION ----------
     let pos = seg.mid;
     if (side === "NJ") pos = seg.nj;
     if (side === "MAN") pos = seg.man;
 
-    // ---------- ICON ----------
     const color = side === "NJ" ? "blue" : "red";
     const arrow = ebb ? "↓" : "↑";
 
@@ -136,7 +133,6 @@ async function drawMap() {
       </div>`
     });
 
-    // ---------- TURN ----------
     let turn = "";
     for (let h=1; h<hours.length; h++) {
       if (timeline[h-1]*timeline[h] < 0) {
@@ -144,23 +140,18 @@ async function drawMap() {
       }
     }
 
-    // ---------- TREND ----------
     let trend = "";
     hours.forEach((h, idx) => {
       trend += `+${h}h: ${timeline[idx].toFixed(1)} kts<br>`;
     });
 
-    // ---------- MARKER ----------
     L.marker(pos, { icon })
       .addTo(map)
       .bindPopup(`
         <b>${seg.name}</b><br><br>
-
         Wind: ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts<br>
         Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br><br>
-
         ${turn}
-
         <b>Trend</b><br>
         ${trend}
       `);
