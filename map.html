@@ -123,7 +123,8 @@ async function drawMap() {
 
   segments.forEach((seg, i) => {
 
-    const current = getCurrent(i);
+    const baseCurrent = await getCurrentFromNOAA();
+const current = baseCurrent * (1 + (i - segments.length/2) * 0.05);
     const ebb = current < 0;
 
     const currentStrength = Math.abs(current);
