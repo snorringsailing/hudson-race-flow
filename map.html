@@ -73,11 +73,20 @@ segments.forEach((seg, i) => {
     color: color,
     fillOpacity: 0.5
   }).addTo(map)
-    .bindPopup(
-      `<b>${seg.name}</b><br>
-       Current: ${current.toFixed(1)} kts<br>
-       ${current < 0 ? "Favor NJ" : "Favor Manhattan"}`
-    );
+    let direction = current < 0 ? "Ebb (southbound)" : "Flood (northbound)";
+let favor = current < 0 ? "Favor NJ (west side)" : "Favor Manhattan (east side)";
+
+L.circle(seg.coords, {
+  radius: 300,
+  color: current < 0 ? "blue" : "red",
+  fillOpacity: 0.6
+}).addTo(map)
+  .bindPopup(
+    `<b>${seg.name}</b><br>
+     ${direction}<br>
+     Current: ${current.toFixed(1)} kts<br>
+     <b>${favor}</b>`
+  );
 });
 
 // centerline
