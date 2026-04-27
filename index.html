@@ -151,25 +151,59 @@ async function runModel() {
 
     const now = getCurrent(i, 0);
     const plus2 = getCurrent(i, 2);
-    const plus4 = getCurrent(i, 4);
-
     const ebb = now < 0;
 
     let side;
+    let tactical;
 
+    // ---------- HUDSON ----------
     if (seg.zone === "hudson") {
-      side = ebb ? "Favor NJ (ebb relief)" : "Favor Manhattan (flood relief)";
-    } else {
-      side = ebb ? "Ebb: stay center channel" : "Flood: use edges / eddies";
+
+      if (ebb) {
+        side = "NJ favored";
+        tactical = "STAY WEST – ride ebb relief";
+      } else {
+        side = "Manhattan favored";
+        tactical = "STAY EAST – flood relief";
+      }
+
+      // crossing logic
+      if (Math.abs(now) < 0.5) {
+        tactical = "CROSS NOW – weak current";
+      }
+
+      if (plus2 * now < 0) {
+        tactical = "WAIT – current turning soon";
+      }
     }
 
-    // wind effects
-    if (wind.dir > 190 && wind.dir < 240) {
-      side += " | SW wind favors west side";
+    // ---------- HARBOR ----------
+    else {
+
+      if (ebb) {
+        side = "Mid-channel flow";
+        tactical = "AVOID SHALLOWS – strongest ebb mid-channel";
+      } else {
+        side = "Edges / eddies";
+        tactical = "WORK SHORELINES – flood back-eddies";
+      }
+
+      if (Math.abs(now) < 0.5) {
+        tactical = "DIRECT ROUTE – minimal current";
+      }
     }
 
-    if (wind.dir > 280 || wind.dir < 40) {
-      side += " | NW wind favors east side";
+    // ---------- WIND EFFECT ----------
+    if (wind.dir > 40 && wind.dir < 120) {
+      tactical += " | EAST WIND: favor Manhattan pressure";
+    }
+
+    if (wind.dir > 190 && wind.dir < 260) {
+      tactical += " | SW WIND: favor NJ pressure";
+    }
+
+    if (wind.spd < 7) {
+      tactical += " | LIGHT AIR: prioritize pressure over current";
     }
 
     html += `
@@ -177,10 +211,10 @@ async function runModel() {
         <strong>${seg.name}</strong><br>
         ${seg.landmark}<br>
 
-        Now: ${now.toFixed(1)} kts ${ebb ? "Ebb" : "Flood"}<br>
-        +2h: ${plus2.toFixed(1)} | +4h: ${plus4.toFixed(1)}<br>
+        Current: ${now.toFixed(1)} kts ${ebb ? "Ebb" : "Flood"}<br>
 
-        ${side}
+        <b>${side}</b><br>
+        <b>${tactical}</b>
       </div>
     `;
   });
