@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hudson Race Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    body { margin:0; font-family: Arial; }
+    #map { height: 100vh; }
+    .legend {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<div class="legend">
+  <b>Current Strength</b><br>
+  Blue = Favor NJ<br>
+  Red = Favor Manhattan
+</div>
+
+<script>
+
+// ---------- MAP ----------
+const map = L.map('map').setView([40.75, -74.01], 12);
+
+// basemap
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18
+}).addTo(map);
+
+// ---------- SEGMENTS (approx positions) ----------
+const segments = [
+  { name: "Battery", coords: [40.70, -74.01] },
+  { name: "Pier 25", coords: [40.72, -74.01] },
+  { name: "Pier 40", coords: [40.73, -74.01] },
+  { name: "Little Island", coords: [40.74, -74.01] },
+  { name: "Midtown", coords: [40.76, -74.00] },
+  { name: "Stevens", coords: [40.74, -74.02] },
+  { name: "GW Bridge", coords: [40.85, -73.95] }
+];
+
+// ---------- CURRENT MODEL ----------
+function getCurrent(i) {
+  return Math.sin(i * 0.8) * 2;
+}
+
+// ---------- DRAW ----------
+segments.forEach((seg, i) => {
+
+  const current = getCurrent(i);
+
+  // color logic
+  let color = current < 0 ? "blue" : "red";
+  let width = 5 + Math.abs(current) * 3;
+
+  L.circle(seg.coords, {
+    radius: 300,
+    color: color,
+    fillOpacity: 0.5
+  }).addTo(map)
+    .bindPopup(
+      `<b>${seg.name}</b><br>
+       Current: ${current.toFixed(1)} kts<br>
+       ${current < 0 ? "Favor NJ" : "Favor Manhattan"}`
+    );
+});
+
+// centerline
+L.polyline(segments.map(s => s.coords), {
+  color: "black",
+  weight: 2
+}).addTo(map);
+
+</script>
+
+</body>
+</html>
