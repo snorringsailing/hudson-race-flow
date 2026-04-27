@@ -237,7 +237,17 @@ async function runModel() {
 }
 
 // run on load
+// show loading immediately
+document.getElementById("output").innerHTML = "Loading...";
+
+// run once
 runModel();
+
+// run again after slight delay (fixes mobile async lag)
+setTimeout(runModel, 800);
+
+// optional: refresh every 2 minutes
+setInterval(runModel, 120000);
 
 </script>
 
