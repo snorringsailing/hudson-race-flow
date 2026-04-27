@@ -155,7 +155,10 @@ async function runModel() {
 
   segments.forEach((name, i) => {
 
-    const current = getCurrent(i);
+    const baseCurrent = await getCurrentFromNOAA();
+
+// add slight variation by segment
+const current = baseCurrent * (1 + (i - segments.length/2) * 0.05);
     const ebb = current < 0;
 
     let call = ebb ? "Stay NJ" : "Stay Manhattan";
