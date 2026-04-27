@@ -241,13 +241,9 @@ document.getElementById("output").innerHTML = "Loading data...";
 document.getElementById("output").innerHTML = "Loading...";
 
 // run once
-runModel();
+document.getElementById("output").innerHTML = "Loading...";
+setTimeout(runModel, 300);
 
-// run again after slight delay (fixes mobile async lag)
-setTimeout(runModel, 800);
-
-// optional: refresh every 2 minutes
-setInterval(runModel, 120000);
 
 </script>
 
