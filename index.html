@@ -37,36 +37,6 @@
       background: #28a745;
       color: white;
     }
-
-    .south { background:#17a2b8; }
-
-    .mapRow { margin: 10px 0; }
-
-    .river {
-      display: flex;
-      height: 20px;
-      border-radius: 6px;
-      overflow: hidden;
-      background: #ddd;
-    }
-
-    .nj {
-      background: #007bff;
-      text-align: left;
-      padding-left: 5px;
-      font-size: 12px;
-      color: white;
-    }
-
-    .ny {
-      background: #ff4136;
-      text-align: right;
-      padding-right: 5px;
-      font-size: 12px;
-      color: white;
-    }
-
-    .small { font-size: 12px; }
   </style>
 </head>
 
@@ -82,7 +52,10 @@
 
 <button onclick="runModel()">Run Model</button>
 
-<div id="map"></div>
+<a href="map.html">
+  <button>Open Map View</button>
+</a>
+
 <div id="output"></div>
 
 <script>
@@ -95,19 +68,17 @@ window.onload = function() {
 };
 
 const segments = [
-  { name: "Battery to Governors", zone: "south" },
-  { name: "Governors to Red Hook", zone: "south" },
-  { name: "Red Hook to Bay Ridge", zone: "south" },
-  { name: "Bay Ridge to Verrazzano", zone: "south" },
-  { name: "North Cove to Pier 25", zone: "hudson" },
-  { name: "Pier 25 to Pier 40", zone: "hudson" },
-  { name: "Pier 40 to Pier 66", zone: "hudson" },
-  { name: "Pier 66 to Pier 79", zone: "hudson" },
-  { name: "Pier 79 to GW Bridge", zone: "hudson" }
+  "Battery",
+  "Pier 25",
+  "Pier 40",
+  "Little Island",
+  "Midtown",
+  "Stevens",
+  "GW Bridge"
 ];
 
-function getCurrent(i, t) {
-  return Math.sin(i * 0.8 + t * 0.5) * 2;
+function getCurrent(i) {
+  return Math.sin(i * 0.8) * 2;
 }
 
 async function fetchWind() {
@@ -120,16 +91,11 @@ async function fetchWind() {
 
     return {
       dir: data.current_weather.winddirection,
-      spd: data.current_weather.windspeed * 0.54,
-      label: "LIVE WIND"
+      spd: data.current_weather.windspeed * 0.54
     };
 
   } catch {
-    return {
-      dir: 220,
-      spd: 12,
-      label: "DEFAULT WIND"
-    };
+    return { dir: 220, spd: 12 };
   }
 }
 
@@ -142,75 +108,36 @@ async function runModel() {
   windSpeedInput = windSpeedInput ? parseFloat(windSpeedInput) : null;
 
   let wind = (windDirInput && windSpeedInput)
-    ? { dir: windDirInput, spd: windSpeedInput, label: "MANUAL" }
+    ? { dir: windDirInput, spd: windSpeedInput }
     : await fetchWind();
 
-  let mapHTML = "";
   let html = `
     <div class="header">
-      ${wind.label}<br>
-      ${wind.dir.toFixed(0)} deg @ ${wind.spd.toFixed(1)} kts
+      ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts
     </div>
   `;
 
-  segments.forEach((seg, i) => {
+  segments.forEach((name, i) => {
 
-    const current = getCurrent(i, 0);
+    const current = getCurrent(i);
     const ebb = current < 0;
-    const strength = Math.min(Math.abs(current)/2,1);
 
-    let njWidth = 50;
-    let nyWidth = 50;
+    let call = ebb ? "Stay NJ" : "Stay Manhattan";
 
-    if (ebb) {
-      njWidth = 50 + strength*40;
-      nyWidth = 100 - njWidth;
-    } else {
-      nyWidth = 50 + strength*40;
-      njWidth = 100 - nyWidth;
-    }
-
-    let direction = ebb ? "Ebb (south)" : "Flood (north)";
-    let favored = ebb ? "Favor NJ" : "Favor Manhattan";
-
-    mapHTML += `
-      <div class="mapRow">
-        <div><b>${seg.name}</b></div>
-        <div class="small">${direction}</div>
-
-        <div class="river">
-          <div class="nj" style="width:${njWidth}%">${njWidth>nyWidth?"NJ":""}</div>
-          <div class="ny" style="width:${nyWidth}%">${nyWidth>njWidth?"MAN":""}</div>
-        </div>
-
-        <div class="small"><b>${favored}</b></div>
-      </div>
-    `;
-
-    let tactical;
-
-    if (seg.zone === "hudson") {
-      tactical = ebb ? "Stay NJ" : "Stay Manhattan";
-      if (Math.abs(current)<0.5) tactical="Cross now";
-    } else {
-      tactical = ebb ? "Mid-channel" : "Use edges";
-    }
+    if (Math.abs(current) < 0.5) call = "Cross now";
 
     html += `
-      <div class="segment ${seg.zone==="south"?"south":""}">
-        <b>${seg.name}</b><br>
-        Current: ${current.toFixed(1)} kts (${direction})<br>
-        <b>${tactical}</b>
+      <div class="segment">
+        <b>${name}</b><br>
+        Current: ${current.toFixed(1)} kts<br>
+        <b>${call}</b>
       </div>
     `;
   });
 
-  document.getElementById("map").innerHTML = mapHTML;
   document.getElementById("output").innerHTML = html;
 }
-<a href="map.html">
-  <button>Open Map View</button>
-</a>
+
 </script>
 
 </body>
