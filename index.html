@@ -88,21 +88,19 @@ function getCurrent(i, t) {
 async function fetchWind() {
   try {
     const res = await fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current=wind_speed,wind_direction"
+      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
     );
 
     if (!res.ok) throw "HTTP error";
 
     const data = await res.json();
 
-    console.log("OPEN METEO DATA:", data);
+    console.log("OPEN METEO:", data);
 
-    if (!data.current) throw "No current data";
+    const dir = data.current_weather.winddirection;
+    const spd = data.current_weather.windspeed * 0.54; // km/h → knots
 
-    const dir = data.current.wind_direction;
-    const spd = data.current.wind_speed * 0.54;
-
-    if (!dir || !spd) throw "Bad wind values";
+    if (!dir || !spd) throw "Bad values";
 
     return {
       dir: dir,
@@ -116,7 +114,7 @@ async function fetchWind() {
     return {
       dir: 220,
       spd: 12,
-      label: "WIND DEFAULT (CHECK CONSOLE)"
+      label: "WIND DEFAULT"
     };
   }
 }
