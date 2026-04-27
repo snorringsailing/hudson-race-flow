@@ -64,8 +64,34 @@ const segments = [
 ];
 
 // ---------- CURRENT MODEL ----------
-function getCurrent(i) {
-  return Math.sin(i * 0.8) * 2;
+async function getCurrentFromNOAA() {
+  try {
+    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
+
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+
+    const res = await fetch(proxy);
+    const data = await res.json();
+
+    if (!data.data || data.data.length === 0) throw "No data";
+
+    // get closest time value
+    const now = new Date();
+
+    let closest = data.data[0];
+
+    data.data.forEach(d => {
+      if (Math.abs(new Date(d.t) - now) < Math.abs(new Date(closest.t) - now)) {
+        closest = d;
+      }
+    });
+
+    return parseFloat(closest.v); // velocity in knots
+
+  } catch (err) {
+    console.log("NOAA current error:", err);
+    return 0; // fallback neutral
+  }
 }
 
 // ---------- DRAW ----------
