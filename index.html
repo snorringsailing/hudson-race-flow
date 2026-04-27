@@ -27,6 +27,7 @@
       border-radius:8px;
       color:white;
       text-align:center;
+      background:#007bff;
     }
 
     .segment {
@@ -37,7 +38,7 @@
       color: white;
     }
 
-    .south { background: #17a2b8; }  /* different color for harbor */
+    .south { background:#17a2b8; }
   </style>
 </head>
 
@@ -48,16 +49,16 @@
 <input type="date" id="date">
 <input type="time" id="time">
 
-<input type="number" id="windDir" placeholder="Wind Direction (°)">
+<input type="number" id="windDir" placeholder="Wind Direction (degrees)">
 <input type="number" id="windSpeed" placeholder="Wind Speed (knots)">
 
-<button onclick="runModel()">Run 4-Hour Model</button>
+<button onclick="runModel()">Run 4 Hour Model</button>
 
 <div id="output"></div>
 
 <script>
 
-// ---------- DEFAULT DATE + TIME ----------
+// ---------- DEFAULT DATE/TIME ----------
 window.onload = function() {
   const now = new Date();
   document.getElementById("date").value = now.toISOString().split("T")[0];
@@ -65,29 +66,25 @@ window.onload = function() {
   runModel();
 };
 
-// ---------- SEGMENTS (EXTENDED SOUTH) ----------
+// ---------- SEGMENTS ----------
 const segments = [
-
-  // SOUTH OF BATTERY
-  { name: "Battery → Governors Island", landmark: "Harbor entrance", zone: "south" },
-  { name: "Governors → Red Hook", landmark: "Buttermilk Channel", zone: "south" },
-  { name: "Red Hook → Bay Ridge", landmark: "Upper Bay east side", zone: "south" },
-  { name: "Bay Ridge → Verrazzano Bridge", landmark: "Narrows", zone: "south" },
-
-  // HUDSON
-  { name: "North Cove → Pier 25", landmark: "Battery / Holland Tunnel", zone: "hudson" },
-  { name: "Pier 25 → Pier 40", landmark: "Tribeca", zone: "hudson" },
-  { name: "Pier 40 → Pier 66", landmark: "Little Island", zone: "hudson" },
-  { name: "Pier 66 → Pier 79", landmark: "Midtown", zone: "hudson" },
-  { name: "Pier 79 → GW Bridge", landmark: "Stevens Tech", zone: "hudson" }
+  { name: "Battery to Governors Island", zone: "south", landmark: "Harbor entrance" },
+  { name: "Governors to Red Hook", zone: "south", landmark: "Buttermilk Channel" },
+  { name: "Red Hook to Bay Ridge", zone: "south", landmark: "Upper Bay east side" },
+  { name: "Bay Ridge to Verrazzano Bridge", zone: "south", landmark: "Narrows" },
+  { name: "North Cove to Pier 25", zone: "hudson", landmark: "Battery / Holland Tunnel" },
+  { name: "Pier 25 to Pier 40", zone: "hudson", landmark: "Tribeca" },
+  { name: "Pier 40 to Pier 66", zone: "hudson", landmark: "Little Island" },
+  { name: "Pier 66 to Pier 79", zone: "hudson", landmark: "Midtown" },
+  { name: "Pier 79 to GW Bridge", zone: "hudson", landmark: "Stevens Tech" }
 ];
 
 // ---------- CURRENT MODEL ----------
 function getCurrent(i, t) {
-  return Math.sin(i * 0.7 + t * 0.5) * 2;
+  return Math.sin(i * 0.8 + t * 0.5) * 2;
 }
 
-// ---------- ROBBINS REEF WIND ----------
+// ---------- SIMPLE WIND (OPEN-METEO) ----------
 async function fetchWind() {
   try {
     const res = await fetch(
@@ -96,113 +93,88 @@ async function fetchWind() {
 
     const data = await res.json();
 
-    const dir = data.current.wind_direction;
-    const spd = data.current.wind_speed * 0.54; // convert km/h → knots
-
-    if (!dir || !spd) throw "Bad data";
-
     return {
-      dir: dir,
-      spd: spd,
-      label: "LIVE WIND (HARBOR)"
+      dir: data.current.wind_direction,
+      spd: data.current.wind_speed * 0.54, // km/h → knots
+      label: "LIVE WIND (HARBOR MODEL)"
     };
 
-  } catch (err) {
-    console.log("Wind fetch failed:", err);
-
+  } catch {
     return {
       dir: 220,
       spd: 12,
-      label: "WIND FALLBACK"
+      label: "WIND DEFAULT"
     };
   }
 }
+
 // ---------- MAIN ----------
 async function runModel() {
 
-  try {
+  const date = document.getElementById("date").value;
+  const time = document.getElementById("time").value;
 
-    const date = document.getElementById("date").value;
-    const time = document.getElementById("time").value;
+  let windDirInput = document.getElementById("windDir").value;
+  let windSpeedInput = document.getElementById("windSpeed").value;
 
-    let windDirInput = document.getElementById("windDir").value;
-    let windSpeedInput = document.getElementById("windSpeed").value;
+  windDirInput = windDirInput ? parseFloat(windDirInput) : null;
+  windSpeedInput = windSpeedInput ? parseFloat(windSpeedInput) : null;
 
-    windDirInput = windDirInput ? parseFloat(windDirInput) : null;
-    windSpeedInput = windSpeedInput ? parseFloat(windSpeedInput) : null;
+  let wind;
 
-    let wind;
+  if (windDirInput && windSpeedInput) {
+    wind = { dir: windDirInput, spd: windSpeedInput, label: "MANUAL OVERRIDE" };
+  } else {
+    wind = await fetchWind();
+  }
 
-    if (windDirInput && windSpeedInput) {
-      wind = { dir: windDirInput, spd: windSpeedInput, label: "MANUAL OVERRIDE" };
+  let html = `
+    <div class="header">
+      ${wind.label}<br>
+      ${date} ${time}<br>
+      ${wind.dir.toFixed(0)} deg @ ${wind.spd.toFixed(1)} kts
+    </div>
+  `;
+
+  segments.forEach((seg, i) => {
+
+    const now = getCurrent(i, 0);
+    const plus2 = getCurrent(i, 2);
+    const plus4 = getCurrent(i, 4);
+
+    const ebb = now < 0;
+
+    let side;
+
+    if (seg.zone === "hudson") {
+      side = ebb ? "Favor NJ (ebb relief)" : "Favor Manhattan (flood relief)";
     } else {
-      wind = await fetchWind();
+      side = ebb ? "Ebb: stay center channel" : "Flood: use edges / eddies";
     }
 
-    let headerColor =
-      wind.label === "MANUAL OVERRIDE" ? "#f39c12" : "#007bff";
+    // wind effects
+    if (wind.dir > 190 && wind.dir < 240) {
+      side += " | SW wind favors west side";
+    }
 
-    let html = `
-      <div class="header" style="background:${headerColor}">
-        ${wind.label}<br>
-        ${date} ${time}<br>
-        ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts
+    if (wind.dir > 280 || wind.dir < 40) {
+      side += " | NW wind favors east side";
+    }
+
+    html += `
+      <div class="segment ${seg.zone === 'south' ? 'south' : ''}">
+        <strong>${seg.name}</strong><br>
+        ${seg.landmark}<br>
+
+        Now: ${now.toFixed(1)} kts ${ebb ? "Ebb" : "Flood"}<br>
+        +2h: ${plus2.toFixed(1)} | +4h: ${plus4.toFixed(1)}<br>
+
+        ${side}
       </div>
     `;
+  });
 
-    segments.forEach((seg, i) => {
-
-      const now = getCurrent(i, 0);
-      const plus2 = getCurrent(i, 2);
-      const plus4 = getCurrent(i, 4);
-
-      const ebb = now < 0;
-
-      let side = "";
-
-      // HUDSON LOGIC
-      if (seg.zone === "hudson") {
-        side = ebb
-          ? "👉 Favor NJ (ebb relief)"
-          : "👉 Favor Manhattan (flood relief)";
-      }
-
-      // HARBOR LOGIC
-      if (seg.zone === "south") {
-        side = ebb
-          ? "👉 Ebb: push center / avoid shallows"
-          : "👉 Flood: edges and back-eddies";
-      }
-
-      // WIND EFFECT
-      if (wind.dir > 190 && wind.dir < 240) {
-        side += " | SW wind favors west side";
-      }
-
-      if (wind.dir > 280 || wind.dir < 40) {
-        side += " | NW wind favors east side";
-      }
-
-      html += `
-        <div class="segment ${seg.zone === 'south' ? 'south' : ''}">
-          <strong>${seg.name}</strong><br>
-          ${seg.landmark}<br>
-
-          Now: ${now.toFixed(1)} kts ${ebb ? "⬇️ Ebb" : "⬆️ Flood"}<br>
-          +2h: ${plus2.toFixed(1)} | +4h: ${plus4.toFixed(1)}<br>
-
-          ${side}
-        </div>
-      `;
-    });
-
-    document.getElementById("output").innerHTML = html;
-
-  } catch (err) {
-    console.log(err);
-    document.getElementById("output").innerHTML =
-      "<div style='color:red;'>Error running model</div>";
-  }
+  document.getElementById("output").innerHTML = html;
 }
 
 </script>
