@@ -174,21 +174,28 @@ async function runModel() {
 
     // ---------- MAP ----------
     mapHTML += `
-      <div class="mapRow">
-        <div>${seg.name}</div>
+      let direction = ebb ? "Ebb ↓ (southbound)" : "Flood ↑ (northbound)";
+let favored = ebb ? "Favor NJ" : "Favor Manhattan";
 
-        <div class="river">
-          <div class="nj" style="width:${njWidth}%"></div>
-          <div class="ny" style="width:${nyWidth}%"></div>
-        </div>
+mapHTML += `
+  <div class="mapRow">
+    <div><b>${seg.name}</b></div>
 
-        <div class="labelRow">
-          <span>NJ</span>
-          <span>Manhattan</span>
-        </div>
-      </div>
-    `;
+    <div>${direction}</div>
 
+    <div class="river">
+      <div class="nj" style="width:${njWidth}%">${njWidth > nyWidth ? "NJ" : ""}</div>
+      <div class="ny" style="width:${nyWidth}%">${nyWidth > njWidth ? "MAN" : ""}</div>
+    </div>
+
+    <div class="labelRow">
+      <span>NJ</span>
+      <span>Manhattan</span>
+    </div>
+
+    <div><b>${favored}</b></div>
+  </div>
+`;
     // ---------- TACTICS ----------
     let tactical;
 
