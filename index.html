@@ -1,40 +1,72 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Hudson Map</title>
+  <title>Hudson Race Flow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
   <style>
-    body { margin:0; }
-    #map { height:100vh; }
+    body { font-family: Arial; padding: 15px; background: #f5f5f5; }
+    h2 { text-align: center; }
+
+    input, button {
+      width: 100%;
+      padding: 12px;
+      font-size: 18px;
+      margin: 6px 0;
+    }
+
     button {
-      position:absolute;
-      top:10px;
-      left:10px;
-      z-index:1000;
+      background: #007bff;
+      color: white;
+      border: none;
+    }
+
+    .header {
       padding:10px;
+      margin-bottom:10px;
+      border-radius:8px;
+      color:white;
+      text-align:center;
+      background:#007bff;
+    }
+
+    .segment {
+      margin: 10px 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: #28a745;
+      color: white;
     }
   </style>
 </head>
 
 <body>
 
-<a href="index.html"><button>Back</button></a>
-<div id="map"></div>
+<h2>Hudson Race Flow</h2>
+
+<input type="number" id="windDir" placeholder="Wind Direction (deg)">
+<input type="number" id="windSpeed" placeholder="Wind Speed (knots)">
+
+<button onclick="runModel()">Run Model</button>
+
+<a href="map.html">
+  <button>Open Map View</button>
+</a>
+
+<div id="output"></div>
 
 <script>
 
-const map = L.map('map').setView([40.70, -74.02], 12);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+function getCompass(dir) {
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(dir / 22.5) % 16];
+}
 
 async function fetchWind() {
   try {
     const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true");
     const data = await res.json();
+
     return {
       dir: data.current_weather.winddirection,
       spd: data.current_weather.windspeed * 0.54
@@ -52,6 +84,8 @@ async function getCurrentFromNOAA() {
     const res = await fetch(proxy);
     const data = await res.json();
 
+    if (!data.data) throw "no data";
+
     return parseFloat(data.data[0].v);
 
   } catch {
@@ -59,61 +93,61 @@ async function getCurrentFromNOAA() {
   }
 }
 
-function windFavor(dir) {
-  if (dir > 45 && dir < 135) return "MAN";
-  if (dir > 225 && dir < 315) return "NJ";
-  return "NEUTRAL";
-}
-
 const segments = [
-  { name: "Verrazzano", coords: [40.606, -74.045] },
-  { name: "Bay Ridge", coords: [40.620, -74.030] },
-  { name: "Red Hook", coords: [40.660, -74.015] },
-  { name: "Governors Island", coords: [40.695, -74.020] },
-  { name: "Battery", coords: [40.705, -74.015] },
-  { name: "Pier 25", coords: [40.720, -74.010] },
-  { name: "Pier 40", coords: [40.730, -74.010] },
-  { name: "Midtown", coords: [40.760, -74.000] },
-  { name: "Stevens", coords: [40.745, -74.025] },
-  { name: "GW Bridge", coords: [40.850, -73.960] }
+  "Verrazzano",
+  "Bay Ridge",
+  "Red Hook",
+  "Governors Island",
+  "Battery",
+  "Pier 25",
+  "Pier 40",
+  "Midtown",
+  "Stevens",
+  "GW Bridge"
 ];
 
-async function drawMap() {
+async function runModel() {
 
-  const wind = await fetchWind();
+  let windDirInput = document.getElementById("windDir").value;
+  let windSpeedInput = document.getElementById("windSpeed").value;
+
+  let wind = (windDirInput && windSpeedInput)
+    ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
+    : await fetchWind();
+
   const baseCurrent = await getCurrentFromNOAA();
 
-  segments.forEach((seg, i) => {
+  let html = `
+    <div class="header">
+      ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
+    </div>
+  `;
+
+  segments.forEach((name, i) => {
 
     const current = baseCurrent * (1 + (i - segments.length/2)*0.05);
     const ebb = current < 0;
 
-    let side = ebb ? "NJ" : "MAN";
+    let call = ebb ? "Favor NJ" : "Favor Manhattan";
 
     if (wind.spd < 7) {
-      side = windFavor(wind.dir);
+      if (wind.dir > 45 && wind.dir < 135) call = "Favor Manhattan (wind)";
+      if (wind.dir > 225 && wind.dir < 315) call = "Favor NJ (wind)";
     }
 
-    const color = side === "NJ" ? "blue" : side === "MAN" ? "red" : "gray";
-    const arrow = ebb ? "↓" : "↑";
-
-    const icon = L.divIcon({
-      html: `<div style="color:${color};font-weight:bold;text-align:center">${arrow}<br>${side}</div>`
-    });
-
-    L.marker(seg.coords, { icon })
-      .addTo(map)
-      .bindPopup(`
-        <b>${seg.name}</b><br>
-        Wind: ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts<br>
+    html += `
+      <div class="segment">
+        <b>${name}</b><br>
         Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
-        <b>Best Side: ${side}</b>
-      `);
-
+        <b>${call}</b>
+      </div>
+    `;
   });
+
+  document.getElementById("output").innerHTML = html;
 }
 
-drawMap();
+runModel();
 
 </script>
 
