@@ -80,26 +80,91 @@ const segments = [
 
 async function drawMap() {
 
+async function drawMap() {
+
   const wind = await fetchWind();
   const baseCurrent = await getCurrentFromNOAA();
 
+  const hours = [0, 1, 2, 3, 4];
+
   segments.forEach((seg, i) => {
 
-    const current = baseCurrent * (1 + (i - segments.length/2)*0.05);
+    let timeline = [];
+
+    // simulate time evolution (simple tide progression)
+    hours.forEach(h => {
+      const tCurrent = baseCurrent * Math.cos(h * 0.8);
+      timeline.push(tCurrent);
+    });
+
+    // detect turn (sign change)
+    let turnTime = null;
+
+    for (let h = 1; h < timeline.length; h++) {
+      if (timeline[h-1] * timeline[h] < 0) {
+        turnTime = h;
+      }
+    }
+
+    // current now
+    const current = timeline[0];
     const ebb = current < 0;
 
+    // wind influence
     let side = ebb ? "NJ" : "MAN";
 
     if (wind.spd < 7) {
-      side = windFavor(wind.dir);
+      if (wind.dir > 45 && wind.dir < 135) side = "MAN";
+      if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
-    const color = side === "NJ" ? "blue" : side === "MAN" ? "red" : "gray";
+    // shift marker
+    let lat = seg.coords[0];
+    let lon = seg.coords[1];
+    const shift = 0.01;
+
+    if (side === "NJ") lon -= shift;
+    if (side === "MAN") lon += shift;
+
+    const color = side === "NJ" ? "blue" : "red";
     const arrow = ebb ? "↓" : "↑";
 
     const icon = L.divIcon({
-      html: `<div style="color:${color};font-weight:bold;text-align:center">${arrow}<br>${side}</div>`
+      html: `
+        <div style="color:${color};font-weight:bold;text-align:center">
+          ${arrow}<br>${side}
+        </div>
+      `
     });
+
+    // build timeline string
+    let timelineText = "";
+    hours.forEach((h, idx) => {
+      timelineText += `+${h}h: ${timeline[idx].toFixed(1)} kts<br>`;
+    });
+
+    let turnText = turnTime !== null
+      ? `<b>TURN ~ +${turnTime}h</b><br>`
+      : "";
+
+    L.marker([lat, lon], { icon })
+      .addTo(map)
+      .bindPopup(`
+        <b>${seg.name}</b><br><br>
+
+        Wind: ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts<br>
+        Current now: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br><br>
+
+        ${turnText}
+
+        <b>Trend:</b><br>
+        ${timelineText}
+      `);
+
+  });
+}
+
+drawMap();
 
    // shift position left/right based on best side
 let lat = seg.coords[0];
