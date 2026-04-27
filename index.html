@@ -91,18 +91,23 @@ function getCurrent(i, t) {
 async function fetchWind() {
   try {
     const res = await fetch(
-      "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=latest_obs&station=8530973&units=english&format=json"
+      "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=wind&station=8530973&time_zone=gmt&units=english&interval=6&format=json"
     );
 
     const data = await res.json();
 
     if (!data.data || data.data.length === 0) throw "No data";
 
-    const latest = data.data[0];
+    const latest = data.data[data.data.length - 1];
+
+    const dir = parseFloat(latest.d);
+    const spd = parseFloat(latest.s);
+
+    if (isNaN(dir) || isNaN(spd)) throw "Bad data";
 
     return {
-      dir: parseFloat(latest.wind_direction) || 220,
-      spd: parseFloat(latest.wind_speed) || 10,
+      dir: dir,
+      spd: spd,
       label: "ROBBINS REEF LIVE"
     };
 
@@ -112,11 +117,10 @@ async function fetchWind() {
     return {
       dir: 220,
       spd: 12,
-      label: "ROBBINS REEF (FALLBACK)"
+      label: "ROBBINS REEF FALLBACK"
     };
   }
 }
-
 // ---------- MAIN ----------
 async function runModel() {
 
