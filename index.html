@@ -90,10 +90,11 @@ function getCurrent(i, t) {
 // ---------- ROBBINS REEF WIND ----------
 async function fetchWind() {
   try {
-    const res = await fetch(
-      "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=wind&station=8530973&time_zone=gmt&units=english&interval=6&format=json"
-    );
+    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=wind&station=8530973&units=english&format=json";
 
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+
+    const res = await fetch(proxy);
     const data = await res.json();
 
     if (!data.data || data.data.length === 0) throw "No data";
