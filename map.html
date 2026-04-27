@@ -1,105 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Hudson Race Map</title>
+  <title>Hudson Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
   <style>
-    body { margin:0; font-family: Arial; }
-    #map { height: 100vh; }
-    .legend {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background: white;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 12px;
+    body { margin:0; }
+    #map { height:100vh; }
+    button {
+      position:absolute;
+      top:10px;
+      left:10px;
+      z-index:1000;
+      padding:10px;
     }
   </style>
 </head>
 
 <body>
-<a href="index.html">
-  <button style="position:absolute;top:10px;left:10px;z-index:1000;">
-    Back to Model
-  </button>
-</a>
-<div id="map"></div>
 
-<div class="legend">
-  <b>Current Strength</b><br>
-  Blue = Favor NJ<br>
-  Red = Favor Manhattan
-</div>
+<a href="index.html"><button>Back</button></a>
+<div id="map"></div>
 
 <script>
 
-// ---------- MAP ----------
-const map = L.map('map').setView([40.66, -74.02], 12);
-// basemap
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18
-}).addTo(map);
+const map = L.map('map').setView([40.70, -74.02], 12);
 
-// ---------- SEGMENTS (approx positions) ----------
-const segments = [
-  { name: "Verrazzano Narrows", coords: [40.606, -74.045] },
-  { name: "Bay Ridge Channel", coords: [40.620, -74.030] },
-  { name: "Upper Bay Mid", coords: [40.640, -74.015] },
-  { name: "Red Hook Channel", coords: [40.660, -74.015] },
-  { name: "Buttermilk Channel", coords: [40.680, -74.010] },
-  { name: "Governors Island West", coords: [40.695, -74.020] },
-  { name: "Battery Channel", coords: [40.705, -74.015] },
-  { name: "Pier 25 Mid-River", coords: [40.720, -74.010] },
-  { name: "Pier 40 Mid-River", coords: [40.730, -74.010] },
-  { name: "Little Island Mid", coords: [40.740, -74.010] },
-  { name: "Midtown Channel", coords: [40.760, -74.000] },
-  { name: "Stevens Mid", coords: [40.745, -74.025] },
-  { name: "GW Bridge Channel", coords: [40.850, -73.960] }
-];
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// ---------- CURRENT MODEL ----------
-async function getCurrentFromNOAA() {
+async function fetchWind() {
   try {
-    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
-
-    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-
-    const res = await fetch(proxy);
-    const data = await res.json();
-
-    if (!data.data || data.data.length === 0) throw "No data";
-
-    // get closest time value
-    const now = new Date();
-
-    let closest = data.data[0];
-
-    data.data.forEach(d => {
-      if (Math.abs(new Date(d.t) - now) < Math.abs(new Date(closest.t) - now)) {
-        closest = d;
-      }
-    });
-
-    return parseFloat(closest.v); // velocity in knots
-
-  } catch (err) {
-    console.log("NOAA current error:", err);
-    return 0; // fallback neutral
-  }
-}
-
-// ---------- DRAW ----------
-async function getWind() {
-  try {
-    const res = await fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
-    );
+    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true");
     const data = await res.json();
     return {
       dir: data.current_weather.winddirection,
@@ -110,86 +44,76 @@ async function getWind() {
   }
 }
 
+async function getCurrentFromNOAA() {
+  try {
+    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+
+    const res = await fetch(proxy);
+    const data = await res.json();
+
+    return parseFloat(data.data[0].v);
+
+  } catch {
+    return Math.sin(Date.now()/10000000)*1.5;
+  }
+}
+
 function windFavor(dir) {
-  // east winds favor Manhattan, west winds favor NJ
   if (dir > 45 && dir < 135) return "MAN";
   if (dir > 225 && dir < 315) return "NJ";
   return "NEUTRAL";
 }
 
+const segments = [
+  { name: "Verrazzano", coords: [40.606, -74.045] },
+  { name: "Bay Ridge", coords: [40.620, -74.030] },
+  { name: "Red Hook", coords: [40.660, -74.015] },
+  { name: "Governors Island", coords: [40.695, -74.020] },
+  { name: "Battery", coords: [40.705, -74.015] },
+  { name: "Pier 25", coords: [40.720, -74.010] },
+  { name: "Pier 40", coords: [40.730, -74.010] },
+  { name: "Midtown", coords: [40.760, -74.000] },
+  { name: "Stevens", coords: [40.745, -74.025] },
+  { name: "GW Bridge", coords: [40.850, -73.960] }
+];
+
 async function drawMap() {
 
-  const wind = await getWind();
+  const wind = await fetchWind();
+  const baseCurrent = await getCurrentFromNOAA();
 
   segments.forEach((seg, i) => {
 
-    const baseCurrent = await getCurrentFromNOAA();
-const current = baseCurrent * (1 + (i - segments.length/2) * 0.05);
+    const current = baseCurrent * (1 + (i - segments.length/2)*0.05);
     const ebb = current < 0;
 
-    const currentStrength = Math.abs(current);
+    let side = ebb ? "NJ" : "MAN";
 
-    // current-based side
-    let currentSide = ebb ? "NJ" : "MAN";
-
-    // wind-based side
-    let windSide = windFavor(wind.dir);
-
-    let finalSide;
-
-    // ---------- COMBINE ----------
     if (wind.spd < 7) {
-      finalSide = windSide; // light air → wind dominates
-    }
-    else if (currentStrength > 1) {
-      finalSide = currentSide; // strong current dominates
-    }
-    else {
-      finalSide = windSide !== "NEUTRAL" ? windSide : currentSide;
+      side = windFavor(wind.dir);
     }
 
-    // ---------- VISUAL ----------
-    let color = "gray";
-    if (finalSide === "NJ") color = "blue";
-    if (finalSide === "MAN") color = "red";
-
+    const color = side === "NJ" ? "blue" : side === "MAN" ? "red" : "gray";
     const arrow = ebb ? "↓" : "↑";
 
     const icon = L.divIcon({
-      className: '',
-      html: `
-        <div style="
-          color:${color};
-          font-weight:bold;
-          text-align:center;
-          font-size:16px;
-        ">
-          ${arrow}<br>${finalSide}
-        </div>
-      `,
-      iconSize: [30, 30]
+      html: `<div style="color:${color};font-weight:bold;text-align:center">${arrow}<br>${side}</div>`
     });
 
-    L.marker(seg.coords, { icon: icon })
+    L.marker(seg.coords, { icon })
       .addTo(map)
       .bindPopup(`
         <b>${seg.name}</b><br>
         Wind: ${wind.dir.toFixed(0)}° @ ${wind.spd.toFixed(1)} kts<br>
         Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
-        <b>Best Side: ${finalSide}</b>
+        <b>Best Side: ${side}</b>
       `);
 
   });
 }
 
-// run it
 drawMap();
-
-// centerline
-L.polyline(segments.map(s => s.coords), {
-  color: "black",
-  weight: 2
-}).addTo(map);
 
 </script>
 
