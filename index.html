@@ -88,11 +88,9 @@
   <option value="NJ">Mark: NJ</option>
 </select>
 
-<button onclick="runModel()">Run Model</button>
-<a id="mapLink" href="#">
-  <button style="background:#28a745;">
-    Open Map
-  </button>
+<button onclick="openMap()" style="background:#28a745;">
+  Open Map
+</button>
 </a>
 <a id="mapLink">
   <button style="background:#28a745;">Open Map</button>
@@ -274,6 +272,15 @@ window.onload = function () {
   if (c) c.onchange = updateMapLink;
   if (m) m.onchange = updateMapLink;
 };
+  function openMap() {
+
+  const course = document.getElementById("courseType")?.value || "upwind";
+  const mark = document.getElementById("markSide")?.value || "MAN";
+
+  const url = `/hudson-race-flow/map.html?course=${course}&mark=${mark}`;
+
+  window.location.href = url;
+}
 </script>
 
 </body>
