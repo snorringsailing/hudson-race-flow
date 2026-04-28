@@ -69,7 +69,7 @@
   <div><b>Hudson Race Flow</b></div>
   <div>
     <a href="/hudson-race-flow/index.html">Model</a>
-    <a href="/hudson-race-flow/map.html">Map</a>
+    <a id="mapLink">Map</a>
   </div>
 </div>
 
@@ -234,7 +234,20 @@ async function runModel() {
 
 // initial run
 setTimeout(runModel, 300);
+function updateMapLink() {
+  const course = document.getElementById("courseType").value;
+  const mark = document.getElementById("markSide").value;
 
+  document.getElementById("mapLink").href =
+    `/hudson-race-flow/map.html?course=${course}&mark=${mark}`;
+}
+
+// update when user changes dropdowns
+document.getElementById("courseType").onchange = updateMapLink;
+document.getElementById("markSide").onchange = updateMapLink;
+
+// set initial link
+updateMapLink();
 </script>
 
 </body>
