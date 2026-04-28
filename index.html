@@ -89,7 +89,11 @@
 </select>
 
 <button onclick="runModel()">Run Model</button>
-
+<a id="mapLink" href="#">
+  <button style="background:#28a745;">
+    Open Map
+  </button>
+</a>
 <a id="mapLink">
   <button style="background:#28a745;">Open Map</button>
 </a>
@@ -248,6 +252,28 @@ document.getElementById("markSide").onchange = updateMapLink;
 
 // set initial link
 updateMapLink();
+  // ---------- MAP LINK ----------
+function updateMapLink() {
+  const course = document.getElementById("courseType")?.value || "upwind";
+  const mark = document.getElementById("markSide")?.value || "MAN";
+
+  const link = document.getElementById("mapLink");
+
+  if (link) {
+    link.href = `/hudson-race-flow/map.html?course=${course}&mark=${mark}`;
+  }
+}
+
+// run after page loads
+window.onload = function () {
+  updateMapLink();
+
+  const c = document.getElementById("courseType");
+  const m = document.getElementById("markSide");
+
+  if (c) c.onchange = updateMapLink;
+  if (m) m.onchange = updateMapLink;
+};
 </script>
 
 </body>
