@@ -25,7 +25,7 @@
 
 <div class="backBtn">
   <a href="/hudson-race-flow/index.html">
-    <button style="padding:8px 16px;">Back to Model</button>
+    <button>Back to Model</button>
   </a>
 </div>
 
@@ -60,7 +60,7 @@ async function fetchWind() {
   }
 }
 
-// ---------- CURRENT ----------
+// ---------- BASE CURRENT (NOAA TIMING) ----------
 async function getCurrent() {
   try {
     const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
@@ -75,7 +75,7 @@ async function getCurrent() {
   }
 }
 
-// ---------- SEGMENTS ----------
+// ---------- SEGMENTS (LANES) ----------
 const segments = [
   { name:"Verrazzano", nj:[40.606,-74.055], mid:[40.606,-74.045], man:[40.606,-74.035] },
   { name:"Bay Ridge", nj:[40.620,-74.040], mid:[40.620,-74.030], man:[40.620,-74.020] },
@@ -85,6 +85,29 @@ const segments = [
   { name:"Pier 40", nj:[40.730,-74.020], mid:[40.730,-74.010], man:[40.730,-74.000] },
   { name:"Midtown", nj:[40.760,-74.015], mid:[40.760,-74.005], man:[40.760,-73.995] }
 ];
+
+// ---------- STEVENS-LIKE CURRENT MODEL ----------
+function shapeCurrent(base, i) {
+
+  let factor = 1;
+
+  // Narrows (strongest flow)
+  if (i === 0) factor = 1.5;
+
+  // Upper harbor (mixing / swirl)
+  else if (i === 2 || i === 3) factor = 1.2;
+
+  // Battery transition zone
+  else if (i === 4) factor = 1.1;
+
+  // Midtown (weaker / more friction)
+  else if (i >= 5) factor = 0.75;
+
+  // slight gradient along river
+  factor *= (1 + (i - 3) * 0.03);
+
+  return base * factor;
+}
 
 // ---------- DRAW ----------
 async function drawMap() {
@@ -106,13 +129,16 @@ async function drawMap() {
   segments.forEach((seg, i) => {
 
     let timeline = [];
+
     hours.forEach(h => {
-      timeline.push(base * Math.cos(h * 0.8));
+      const shaped = shapeCurrent(base, i);
+      timeline.push(shaped * Math.cos(h * 0.8));
     });
 
     const current = timeline[0];
     const ebb = current < 0;
 
+    // ---------- SIDE ----------
     let side = ebb ? "NJ" : "MAN";
 
     if (wind.spd < 7) {
@@ -120,10 +146,12 @@ async function drawMap() {
       else if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
+    // ---------- POSITION ----------
     let pos = seg.mid;
     if (side === "NJ") pos = seg.nj;
     if (side === "MAN") pos = seg.man;
 
+    // ---------- ICON ----------
     const color = side === "NJ" ? "blue" : "red";
     const arrow = ebb ? "↓" : "↑";
 
@@ -133,6 +161,7 @@ async function drawMap() {
       </div>`
     });
 
+    // ---------- TURN ----------
     let turn = "";
     for (let h=1; h<hours.length; h++) {
       if (timeline[h-1]*timeline[h] < 0) {
@@ -140,6 +169,7 @@ async function drawMap() {
       }
     }
 
+    // ---------- TREND ----------
     let trend = "";
     hours.forEach((h, idx) => {
       trend += `+${h}h: ${timeline[idx].toFixed(1)} kts<br>`;
@@ -149,9 +179,12 @@ async function drawMap() {
       .addTo(map)
       .bindPopup(`
         <b>${seg.name}</b><br><br>
+
         Wind: ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts<br>
         Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br><br>
+
         ${turn}
+
         <b>Trend</b><br>
         ${trend}
       `);
