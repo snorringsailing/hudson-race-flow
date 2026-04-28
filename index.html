@@ -13,21 +13,16 @@
       padding:12px;
       display:flex;
       justify-content:space-between;
-      align-items:center;
     }
 
-    .nav a {
-      color:white;
-      text-decoration:none;
-      margin-left:10px;
-    }
+    .nav a { color:white; text-decoration:none; margin-left:10px; }
 
     .container { padding:15px; }
 
-    input, button {
+    input, select, button {
       width:100%;
       padding:12px;
-      font-size:18px;
+      font-size:16px;
       margin:6px 0;
     }
 
@@ -52,18 +47,18 @@
       padding:12px;
       margin:8px 0;
       border-radius:8px;
-      box-shadow:0 1px 4px rgba(0,0,0,0.1);
     }
 
-    .tag {
+    .call {
       font-weight:bold;
-      margin-top:5px;
+      margin-top:6px;
+      color:#222;
     }
 
     .trend {
-      margin-top:6px;
       font-size:13px;
       color:#555;
+      margin-top:6px;
     }
   </style>
 </head>
@@ -80,16 +75,26 @@
 
 <div class="container">
 
-<input type="number" id="windDir" placeholder="Wind Direction (deg)">
-<input type="number" id="windSpeed" placeholder="Wind Speed (kts)">
+<input id="windDir" type="number" placeholder="Wind Direction (deg)">
+<input id="windSpeed" type="number" placeholder="Wind Speed (kts)">
+
+<select id="courseType">
+  <option value="upwind">Upwind</option>
+  <option value="downwind">Downwind</option>
+</select>
+
+<select id="markSide">
+  <option value="MAN">Mark: Manhattan</option>
+  <option value="NJ">Mark: NJ</option>
+</select>
 
 <button onclick="runModel()">Run Model</button>
 
 <a href="/hudson-race-flow/map.html">
-  <button style="background:#28a745;">Open Map View</button>
+  <button style="background:#28a745;">Open Map</button>
 </a>
 
-<div id="output"></div>
+<div id="output">Loading...</div>
 
 </div>
 
@@ -104,39 +109,30 @@ function getCompass(dir) {
 // ---------- WIND ----------
 async function fetchWind() {
   try {
-    const res = await fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
-    );
-    const data = await res.json();
+    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true");
+    const d = await res.json();
 
     return {
-      dir: data.current_weather.winddirection,
-      spd: data.current_weather.windspeed * 0.54
+      dir: d.current_weather.winddirection,
+      spd: d.current_weather.windspeed * 0.54
     };
-
   } catch {
     return { dir: 220, spd: 10 };
   }
 }
 
 // ---------- CURRENT ----------
-async function getCurrentFromNOAA() {
+async function getCurrent() {
   try {
     const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
     const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
 
     const res = await fetch(proxy);
-    const data = await res.json();
+    const d = await res.json();
 
-    if (!data.data || !data.data[0]) throw "bad";
-
-    const val = parseFloat(data.data[0].v);
-    if (isNaN(val)) throw "bad";
-
-    return val;
-
+    return parseFloat(d.data[0].v);
   } catch {
-    return Math.sin(Date.now()/10000000) * 1.5;
+    return Math.sin(Date.now()/10000000) * 1.2;
   }
 }
 
@@ -145,105 +141,99 @@ const segments = [
   "Verrazzano",
   "Bay Ridge",
   "Red Hook",
-  "Governors Island",
+  "Governors",
   "Battery",
-  "Pier 25",
   "Pier 40",
-  "Midtown",
-  "Stevens",
-  "GW Bridge"
+  "Midtown"
 ];
 
 // ---------- MAIN ----------
 async function runModel() {
 
-  try {
+  document.getElementById("output").innerHTML = "Loading...";
 
-    let windDirInput = document.getElementById("windDir").value;
-    let windSpeedInput = document.getElementById("windSpeed").value;
+  const course = document.getElementById("courseType").value;
+  const mark = document.getElementById("markSide").value;
 
-    let wind = (windDirInput && windSpeedInput)
-      ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
-      : await fetchWind();
+  let windDirInput = document.getElementById("windDir").value;
+  let windSpeedInput = document.getElementById("windSpeed").value;
 
-    const baseCurrent = await getCurrentFromNOAA();
+  let wind = (windDirInput && windSpeedInput)
+    ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
+    : await fetchWind();
 
-    const hours = [0,1,2,3,4];
-document.getElementById("output").innerHTML = "Loading data...";
-    let html = `
-      <div class="header">
-        ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
-      </div>
-    `;
+  const base = await getCurrent();
 
-    segments.forEach((name, i) => {
+  const hours = [0,1,2,3,4];
 
-      let timeline = [];
+  let html = `
+    <div class="header">
+      ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
+    </div>
+  `;
 
-      hours.forEach(h => {
-        timeline.push(baseCurrent * Math.cos(h * 0.8));
-      });
+  segments.forEach((name, i) => {
 
-      const current = timeline[0];
-      const ebb = current < 0;
-
-      let call = ebb ? "Favor NJ" : "Favor Manhattan";
-
-      if (wind.spd < 7) {
-        if (wind.dir > 45 && wind.dir < 135) call = "Favor Manhattan (wind)";
-        if (wind.dir > 225 && wind.dir < 315) call = "Favor NJ (wind)";
-      }
-
-      // TURN detection
-      let turn = "";
-      for (let h=1; h<hours.length; h++) {
-        if (timeline[h-1]*timeline[h] < 0) {
-          turn = `TURN ~ +${h}h`;
-        }
-      }
-
-      // TREND
-      let trend = hours.map((h, idx) =>
-        `+${h}h: ${timeline[idx].toFixed(1)}`
-      ).join(" | ");
-
-      html += `
-        <div class="segment">
-          <b>${name}</b><br>
-
-          Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
-          <div class="tag">${call}</div>
-
-          <div class="trend">
-            ${turn ? `<b>${turn}</b><br>` : ""}
-            ${trend}
-          </div>
-        </div>
-      `;
+    let timeline = [];
+    hours.forEach(h => {
+      timeline.push(base * Math.cos(h * 0.8));
     });
 
-    document.getElementById("output").innerHTML = html;
+    const current = timeline[0];
+    const ebb = current < 0;
 
-  } catch (err) {
+    let side = ebb ? "NJ" : "MAN";
 
-    console.log("ERROR:", err);
+    if (wind.spd < 7) {
+      if (wind.dir > 45 && wind.dir < 135) side = "MAN";
+      if (wind.dir > 225 && wind.dir < 315) side = "NJ";
+    }
 
-    document.getElementById("output").innerHTML = `
-      <div style="color:red;">
-        Error loading data — refresh page
+    // ---------- COURSE LOGIC ----------
+    let call = "";
+
+    if (course === "upwind") {
+
+      if (side === mark) call = "Stay on favored side";
+
+      else if (timeline[1] * timeline[0] < 0)
+        call = "Hold — shift coming";
+
+      else
+        call = "Cross toward mark";
+
+    } else {
+
+      if (Math.abs(current) > 1)
+        call = "Ride current";
+
+      else if (side !== mark)
+        call = "Position for next leg";
+
+      else
+        call = "Hold lane";
+    }
+
+    // ---------- TREND ----------
+    let trend = hours.map((h, idx) =>
+      `+${h}h:${timeline[idx].toFixed(1)}`
+    ).join(" | ");
+
+    html += `
+      <div class="segment">
+        <b>${name}</b><br>
+        Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
+        <div class="call">${call}</div>
+        <div class="trend">${trend}</div>
       </div>
     `;
-  }
+  });
+
+  document.getElementById("output").innerHTML = html;
 }
 
-// run on load
-// show loading immediately
-document.getElementById("output").innerHTML = "Loading...";
-
-// run once
-document.getElementById("output").innerHTML = "Loading...";
+// initial run
 setTimeout(runModel, 300);
-
 
 </script>
 
