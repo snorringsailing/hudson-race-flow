@@ -33,7 +33,7 @@
 
 <script>
 
-// ---------- READ SETTINGS ----------
+// ---------- SETTINGS ----------
 const params = new URLSearchParams(window.location.search);
 const course = params.get("course") || "upwind";
 const mark = params.get("mark") || "MAN";
@@ -93,18 +93,13 @@ async function drawMap() {
 
   const wind = await fetchWind();
   const base = await getCurrent();
-  const hours = [0,1,2,3,4];
 
   segments.forEach((seg, i) => {
 
-    let timeline = [];
-    hours.forEach(h => {
-      timeline.push(base * Math.cos(h * 0.8));
-    });
-
-    const current = timeline[0];
+    const current = base * (1 + (i - 3)*0.05);
     const ebb = current < 0;
 
+    // ---------- SIDE ----------
     let side = ebb ? "NJ" : "MAN";
 
     if (wind.spd < 7) {
@@ -112,29 +107,14 @@ async function drawMap() {
       if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
-    // ---------- COURSE LOGIC ----------
+    // ---------- COURSE CALL ----------
     let call = "";
 
     if (course === "upwind") {
-
-      if (side === mark) call = "Stay";
-
-      else if (timeline[1] * timeline[0] < 0)
-        call = "Hold";
-
-      else
-        call = "Cross";
-
+      if (side === mark) call = "STAY";
+      else call = "CROSS";
     } else {
-
-      if (Math.abs(current) > 1)
-        call = "Ride";
-
-      else if (side !== mark)
-        call = "Position";
-
-      else
-        call = "Hold";
+      call = "FLOW";
     }
 
     // ---------- POSITION ----------
@@ -142,8 +122,21 @@ async function drawMap() {
     if (side === "NJ") pos = seg.nj;
     if (side === "MAN") pos = seg.man;
 
-    const color = call === "Cross" ? "orange" :
-                  side === "NJ" ? "blue" : "red";
+    // ---------- CURRENT ARROW (Stevens style) ----------
+    const arrowLength = Math.min(Math.abs(current) * 0.01, 0.02);
+    const dir = ebb ? -1 : 1;
+
+    const lat2 = pos[0] + (arrowLength * dir);
+
+    L.polyline([pos, [lat2, pos[1]]], {
+      color: "black",
+      weight: 2
+    }).addTo(map);
+
+    // ---------- COLOR ----------
+    let color = "black";
+    if (call === "STAY") color = side === "NJ" ? "blue" : "red";
+    if (call === "CROSS") color = "purple";
 
     const icon = L.divIcon({
       html: `<div style="font-weight:bold;color:${color};text-align:center">
@@ -155,9 +148,9 @@ async function drawMap() {
       .addTo(map)
       .bindPopup(`
         <b>${seg.name}</b><br><br>
-        ${call}<br>
+        <b>${call === "CROSS" ? "Cross toward mark" : "Stay on this side"}</b><br><br>
         Wind: ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°)<br>
-        Current: ${current.toFixed(1)} (${ebb?"Ebb":"Flood"})
+        Current: ${current.toFixed(1)} kts (${ebb?"Ebb":"Flood"})
       `);
   });
 }
