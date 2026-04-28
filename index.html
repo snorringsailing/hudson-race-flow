@@ -15,8 +15,6 @@
       justify-content:space-between;
     }
 
-    .nav a { color:white; text-decoration:none; margin-left:10px; }
-
     .container { padding:15px; }
 
     input, select, button {
@@ -52,7 +50,6 @@
     .call {
       font-weight:bold;
       margin-top:6px;
-      color:#222;
     }
 
     .trend {
@@ -67,10 +64,6 @@
 
 <div class="nav">
   <div><b>Hudson Race Flow</b></div>
-  <div>
-    <a href="/hudson-race-flow/index.html">Model</a>
-    <a id="mapLink">Map</a>
-  </div>
 </div>
 
 <div class="container">
@@ -88,13 +81,12 @@
   <option value="NJ">Mark: NJ</option>
 </select>
 
+<button onclick="runModel()">Run Model</button>
+
+<!-- ✅ SINGLE WORKING BUTTON -->
 <button onclick="openMap()" style="background:#28a745;">
   Open Map
 </button>
-</a>
-<a id="mapLink">
-  <button style="background:#28a745;">Open Map</button>
-</a>
 
 <div id="output">Loading...</div>
 
@@ -111,7 +103,9 @@ function getCompass(dir) {
 // ---------- WIND ----------
 async function fetchWind() {
   try {
-    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true");
+    const res = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
+    );
     const d = await res.json();
 
     return {
@@ -154,9 +148,6 @@ async function runModel() {
 
   document.getElementById("output").innerHTML = "Loading...";
 
-  const course = document.getElementById("courseType").value;
-  const mark = document.getElementById("markSide").value;
-
   let windDirInput = document.getElementById("windDir").value;
   let windSpeedInput = document.getElementById("windSpeed").value;
 
@@ -165,6 +156,8 @@ async function runModel() {
     : await fetchWind();
 
   const base = await getCurrent();
+  const course = document.getElementById("courseType").value;
+  const mark = document.getElementById("markSide").value;
 
   const hours = [0,1,2,3,4];
 
@@ -191,32 +184,15 @@ async function runModel() {
       if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
-    // ---------- COURSE LOGIC ----------
     let call = "";
 
     if (course === "upwind") {
-
       if (side === mark) call = "Stay on favored side";
-
-      else if (timeline[1] * timeline[0] < 0)
-        call = "Hold — shift coming";
-
-      else
-        call = "Cross toward mark";
-
+      else call = "Cross toward mark";
     } else {
-
-      if (Math.abs(current) > 1)
-        call = "Ride current";
-
-      else if (side !== mark)
-        call = "Position for next leg";
-
-      else
-        call = "Hold lane";
+      call = Math.abs(current) > 1 ? "Ride current" : "Position for next leg";
     }
 
-    // ---------- TREND ----------
     let trend = hours.map((h, idx) =>
       `+${h}h:${timeline[idx].toFixed(1)}`
     ).join(" | ");
@@ -234,53 +210,23 @@ async function runModel() {
   document.getElementById("output").innerHTML = html;
 }
 
-// initial run
-setTimeout(runModel, 300);
-function updateMapLink() {
+// ---------- MAP NAVIGATION (FIXED) ----------
+function openMap() {
+
   const course = document.getElementById("courseType").value;
   const mark = document.getElementById("markSide").value;
 
-  document.getElementById("mapLink").href =
-    `/hudson-race-flow/map.html?course=${course}&mark=${mark}`;
-}
-
-// update when user changes dropdowns
-document.getElementById("courseType").onchange = updateMapLink;
-document.getElementById("markSide").onchange = updateMapLink;
-
-// set initial link
-updateMapLink();
-  // ---------- MAP LINK ----------
-function updateMapLink() {
-  const course = document.getElementById("courseType")?.value || "upwind";
-  const mark = document.getElementById("markSide")?.value || "MAN";
-
-  const link = document.getElementById("mapLink");
-
-  if (link) {
-    link.href = `/hudson-race-flow/map.html?course=${course}&mark=${mark}`;
-  }
-}
-
-// run after page loads
-window.onload = function () {
-  updateMapLink();
-
-  const c = document.getElementById("courseType");
-  const m = document.getElementById("markSide");
-
-  if (c) c.onchange = updateMapLink;
-  if (m) m.onchange = updateMapLink;
-};
-  function openMap() {
-
-  const course = document.getElementById("courseType")?.value || "upwind";
-  const mark = document.getElementById("markSide")?.value || "MAN";
-
-  const url = `/hudson-race-flow/map.html?course=${course}&mark=${mark}`;
+  const url =
+    "https://snorringsailing.github.io/hudson-race-flow/map.html" +
+    "?course=" + course +
+    "&mark=" + mark;
 
   window.location.href = url;
 }
+
+// initial load
+setTimeout(runModel, 300);
+
 </script>
 
 </body>
