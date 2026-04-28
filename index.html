@@ -11,8 +11,6 @@
       background:#111;
       color:white;
       padding:12px;
-      display:flex;
-      justify-content:space-between;
     }
 
     .container { padding:15px; }
@@ -63,14 +61,19 @@
 <body>
 
 <div class="nav">
-  <div><b>Hudson Race Flow</b></div>
+  <b>Hudson Race Flow</b>
 </div>
 
 <div class="container">
 
+<!-- MANUAL WIND -->
 <input id="windDir" type="number" placeholder="Wind Direction (deg)">
 <input id="windSpeed" type="number" placeholder="Wind Speed (kts)">
 
+<!-- FUTURE TIME -->
+<input id="raceTime" type="datetime-local">
+
+<!-- COURSE -->
 <select id="courseType">
   <option value="upwind">Upwind</option>
   <option value="downwind">Downwind</option>
@@ -83,7 +86,7 @@
 
 <button onclick="runModel()">Run Model</button>
 
-<!-- ✅ SINGLE WORKING BUTTON -->
+<!-- ✅ ONE BUTTON ONLY -->
 <button onclick="openMap()" style="background:#28a745;">
   Open Map
 </button>
@@ -100,7 +103,7 @@ function getCompass(dir) {
   return dirs[Math.round(dir / 22.5) % 16];
 }
 
-// ---------- WIND ----------
+// ---------- LIVE WIND ----------
 async function fetchWind() {
   try {
     const res = await fetch(
@@ -150,10 +153,24 @@ async function runModel() {
 
   let windDirInput = document.getElementById("windDir").value;
   let windSpeedInput = document.getElementById("windSpeed").value;
+  let timeInput = document.getElementById("raceTime").value;
 
-  let wind = (windDirInput && windSpeedInput)
-    ? { dir: parseFloat(windDirInput), spd: parseFloat(windSpeedInput) }
-    : await fetchWind();
+  let wind;
+
+  // PRIORITY: manual wind > future mode > live
+  if (windDirInput && windSpeedInput) {
+    wind = {
+      dir: parseFloat(windDirInput),
+      spd: parseFloat(windSpeedInput)
+    };
+
+  } else if (timeInput) {
+    // simple future placeholder (can improve later)
+    wind = { dir: 180, spd: 10 };
+
+  } else {
+    wind = await fetchWind();
+  }
 
   const base = await getCurrent();
   const course = document.getElementById("courseType").value;
@@ -184,13 +201,28 @@ async function runModel() {
       if (wind.dir > 225 && wind.dir < 315) side = "NJ";
     }
 
+    // ---------- IMPROVED CALL LOGIC ----------
     let call = "";
 
     if (course === "upwind") {
-      if (side === mark) call = "Stay on favored side";
-      else call = "Cross toward mark";
+
+      if (side === mark) {
+        call = "Stay (aligned with mark)";
+      } 
+      else if (Math.abs(current) < 0.5) {
+        call = "Cross (low current penalty)";
+      }
+      else {
+        call = "Delay cross (current matters)";
+      }
+
     } else {
-      call = Math.abs(current) > 1 ? "Ride current" : "Position for next leg";
+
+      if (Math.abs(current) > 1) {
+        call = "Ride current";
+      } else {
+        call = "Position for next leg";
+      }
     }
 
     let trend = hours.map((h, idx) =>
@@ -210,7 +242,7 @@ async function runModel() {
   document.getElementById("output").innerHTML = html;
 }
 
-// ---------- MAP NAVIGATION (FIXED) ----------
+// ---------- MAP NAV ----------
 function openMap() {
 
   const course = document.getElementById("courseType").value;
@@ -224,7 +256,7 @@ function openMap() {
   window.location.href = url;
 }
 
-// initial load
+// ---------- LOAD ----------
 setTimeout(runModel, 300);
 
 </script>
