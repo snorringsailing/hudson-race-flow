@@ -1,0 +1,267 @@
+<!-- clean rebuild -->
+<!-- redeploy -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hudson Race Flow</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body { font-family: Arial; margin:0; background:#f5f5f5; }
+
+    .nav {
+      background:#111;
+      color:white;
+      padding:12px;
+    }
+
+    .container { padding:15px; }
+
+    input, select, button {
+      width:100%;
+      padding:12px;
+      font-size:16px;
+      margin:6px 0;
+    }
+
+    button {
+      background:#007bff;
+      color:white;
+      border:none;
+      border-radius:6px;
+    }
+
+    .header {
+      padding:12px;
+      border-radius:8px;
+      background:#007bff;
+      color:white;
+      text-align:center;
+      margin-bottom:10px;
+    }
+
+    .segment {
+      background:white;
+      padding:12px;
+      margin:8px 0;
+      border-radius:8px;
+    }
+
+    .call {
+      font-weight:bold;
+      margin-top:6px;
+    }
+
+    .trend {
+      font-size:13px;
+      color:#555;
+      margin-top:6px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="nav">
+  <b>Hudson Race Flow</b>
+</div>
+
+<div class="container">
+
+<!-- MANUAL WIND -->
+<input id="windDir" type="number" placeholder="Wind Direction (deg)">
+<input id="windSpeed" type="number" placeholder="Wind Speed (kts)">
+
+<!-- FUTURE TIME -->
+<input id="raceTime" type="datetime-local">
+
+<!-- COURSE -->
+<select id="courseType">
+  <option value="upwind">Upwind</option>
+  <option value="downwind">Downwind</option>
+</select>
+
+<select id="markSide">
+  <option value="MAN">Mark: Manhattan</option>
+  <option value="NJ">Mark: NJ</option>
+</select>
+
+<button onclick="runModel()">Run Model</button>
+
+<!-- ✅ ONE BUTTON ONLY -->
+<button onclick="openMap()" style="background:#28a745;">
+  Open Map
+</button>
+
+<div id="output">Loading...</div>
+
+</div>
+
+<script>
+
+// ---------- COMPASS ----------
+function getCompass(dir) {
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(dir / 22.5) % 16];
+}
+
+// ---------- LIVE WIND ----------
+async function fetchWind() {
+  try {
+    const res = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=40.68&longitude=-74.06&current_weather=true"
+    );
+    const d = await res.json();
+
+    return {
+      dir: d.current_weather.winddirection,
+      spd: d.current_weather.windspeed * 0.54
+    };
+  } catch {
+    return { dir: 220, spd: 10 };
+  }
+}
+
+// ---------- CURRENT ----------
+async function getCurrent() {
+  try {
+    const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=currents_predictions&station=8518750&units=english&time_zone=gmt&format=json";
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+
+    const res = await fetch(proxy);
+    const d = await res.json();
+
+    return parseFloat(d.data[0].v);
+  } catch {
+    return Math.sin(Date.now()/10000000) * 1.2;
+  }
+}
+
+// ---------- SEGMENTS ----------
+const segments = [
+  "Verrazzano",
+  "Bay Ridge",
+  "Red Hook",
+  "Governors",
+  "Battery",
+  "Pier 40",
+  "Midtown"
+];
+
+// ---------- MAIN ----------
+async function runModel() {
+
+  document.getElementById("output").innerHTML = "Loading...";
+
+  let windDirInput = document.getElementById("windDir").value;
+  let windSpeedInput = document.getElementById("windSpeed").value;
+  let timeInput = document.getElementById("raceTime").value;
+
+  let wind;
+
+  // PRIORITY: manual wind > future mode > live
+  if (windDirInput && windSpeedInput) {
+    wind = {
+      dir: parseFloat(windDirInput),
+      spd: parseFloat(windSpeedInput)
+    };
+
+  } else if (timeInput) {
+    // simple future placeholder (can improve later)
+    wind = { dir: 180, spd: 10 };
+
+  } else {
+    wind = await fetchWind();
+  }
+
+  const base = await getCurrent();
+  const course = document.getElementById("courseType").value;
+  const mark = document.getElementById("markSide").value;
+
+  const hours = [0,1,2,3,4];
+
+  let html = `
+    <div class="header">
+      ${getCompass(wind.dir)} (${wind.dir.toFixed(0)}°) @ ${wind.spd.toFixed(1)} kts
+    </div>
+  `;
+
+  segments.forEach((name, i) => {
+
+    let timeline = [];
+    hours.forEach(h => {
+      timeline.push(base * Math.cos(h * 0.8));
+    });
+
+    const current = timeline[0];
+    const ebb = current < 0;
+
+    let side = ebb ? "NJ" : "MAN";
+
+    if (wind.spd < 7) {
+      if (wind.dir > 45 && wind.dir < 135) side = "MAN";
+      if (wind.dir > 225 && wind.dir < 315) side = "NJ";
+    }
+
+    // ---------- IMPROVED CALL LOGIC ----------
+    let call = "";
+
+    if (course === "upwind") {
+
+      if (side === mark) {
+        call = "Stay (aligned with mark)";
+      } 
+      else if (Math.abs(current) < 0.5) {
+        call = "Cross (low current penalty)";
+      }
+      else {
+        call = "Delay cross (current matters)";
+      }
+
+    } else {
+
+      if (Math.abs(current) > 1) {
+        call = "Ride current";
+      } else {
+        call = "Position for next leg";
+      }
+    }
+
+    let trend = hours.map((h, idx) =>
+      `+${h}h:${timeline[idx].toFixed(1)}`
+    ).join(" | ");
+
+    html += `
+      <div class="segment">
+        <b>${name}</b><br>
+        Current: ${current.toFixed(1)} kts (${ebb ? "Ebb" : "Flood"})<br>
+        <div class="call">${call}</div>
+        <div class="trend">${trend}</div>
+      </div>
+    `;
+  });
+
+  document.getElementById("output").innerHTML = html;
+}
+
+// ---------- MAP NAV ----------
+function openMap() {
+
+  const course = document.getElementById("courseType").value;
+  const mark = document.getElementById("markSide").value;
+
+  const url =
+    "https://snorringsailing.github.io/hudson-race-flow/map.html" +
+    "?course=" + course +
+    "&mark=" + mark;
+
+  window.location.href = url;
+}
+
+// ---------- LOAD ----------
+setTimeout(runModel, 300);
+
+</script>
+
+</body>
+</html>
